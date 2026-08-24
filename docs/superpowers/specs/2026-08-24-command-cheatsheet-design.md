@@ -78,8 +78,8 @@ README usage table: `cmdpeek fd` — if that name is unique, print the cheat she
 ## Files
 
 - `src/cmdpeek.psm1` — branch on the search path
-- `src/InteractiveMode.ps1` — title/header without index when formatting a cheat sheet (optional `-CheatSheet` or omit numbering when count is 1 and a dedicated header is passed)
+- `src/InteractiveMode.ps1` — `Format-CmdPeekQuickOutput -CheatSheet` omits the `1.` index; title is `{command} ({manager})` (and PATH suffix). `-Header` is unused in this mode (the title is the header).
 - `tests/Invoke-CmdPeek.Tests.ps1`
 - `README.md`, `src/cmdpeek.ps1` help
 
-Prefer passing `-Header` and skipping the numeric prefix for this mode rather than a second formatter.
+Do not add a second formatter.
