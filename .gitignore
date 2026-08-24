@@ -9,6 +9,10 @@ Pester*.xml
 .local/
 *.user.json
 
+# Node MCP
+mcp/node_modules/
+mcp/dist/
+
 # OS / editor
 Thumbs.db
 Desktop.ini
