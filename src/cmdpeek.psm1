@@ -8,6 +8,8 @@ $script:CmdPeekModuleRoot = $PSScriptRoot
 . (Join-Path $PSScriptRoot 'CommandHistory.ps1')
 . (Join-Path $PSScriptRoot 'UsageExamples.ps1')
 . (Join-Path $PSScriptRoot 'InteractiveMode.ps1')
+. (Join-Path $PSScriptRoot 'Inventory.ps1')
+. (Join-Path $PSScriptRoot 'Tui.ps1')
 
 function Invoke-CmdPeek {
     [CmdletBinding()]
@@ -28,8 +30,43 @@ function Invoke-CmdPeek {
         [string]$WinGetRoot,
         [string]$ExamplesPath,
         [string[]]$EnabledManagers,
-        [scriptblock]$CommandTester
+        [scriptblock]$CommandTester,
+        [scriptblock]$HelpRunner,
+        [switch]$Json,
+        [switch]$Gaps,
+        [string]$Since,
+        [switch]$Recent,
+        [string]$Hide,
+        [string]$Unhide,
+        [string]$Star,
+        [string]$Unstar
     )
+
+    if ($Recent) {
+        $Json = $true
+        $NonInteractive = $true
+    }
+    if ($Json -or $Gaps) {
+        $NonInteractive = $true
+    }
+
+    $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
+    if ($NonInteractive) { $useInteractive = $false }
+
+    # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
+    # -Search/-Category without -Count stay flat and must not use this path.
+    $isRecencyPath = [bool]$Recent -or (
+        -not $useInteractive -and -not $Json -and -not $Gaps -and (
+            $Count -gt 0 -or (-not $Search -and -not $Category)
+        )
+    )
+
+    # Validate -Since before scan/save so bogus values never advance LastPeekAt
+    if ($isRecencyPath) {
+        $sinceCheck = $Since
+        if ([string]::IsNullOrWhiteSpace($sinceCheck)) { $sinceCheck = 'last' }
+        $null = Convert-CmdPeekSince -Since $sinceCheck -Cursor $null
+    }
 
     if ($Import) {
         Import-CmdPeekState -Path $Import -DataDirectory $DataDirectory
@@ -40,6 +77,24 @@ function Invoke-CmdPeek {
     if ($Export -and -not $Interactive) {
         Export-CmdPeekState -Path $Export -DataDirectory $DataDirectory
         Write-Host "Exported state to $Export"
+        return
+    }
+
+    if ($Hide -or $Unhide -or $Star -or $Unstar) {
+        $state = Get-CmdPeekState -DataDirectory $DataDirectory
+        if ($Hide) {
+            $state = Set-CmdPeekHidden -State $state -Command $Hide -Hidden $true
+        }
+        if ($Unhide) {
+            $state = Set-CmdPeekHidden -State $state -Command $Unhide -Hidden $false
+        }
+        if ($Star) {
+            $state = Set-CmdPeekFavorite -State $state -Command $Star -Favorite $true
+        }
+        if ($Unstar) {
+            $state = Set-CmdPeekFavorite -State $state -Command $Unstar -Favorite $false
+        }
+        Save-CmdPeekState -State $state -DataDirectory $DataDirectory
         return
     }
 
@@ -75,6 +130,9 @@ function Invoke-CmdPeek {
             else { $pm = 'scoop' }
         }
         [void](Install-CmdPeekTrackedPackage -PackageName $Reinstall -PackageManager $pm)
+        $prefState = Get-CmdPeekState -DataDirectory $DataDirectory
+        $prefState = Set-CmdPeekPreferredPackageManager -State $prefState -PackageManager $pm
+        Save-CmdPeekState -State $prefState -DataDirectory $DataDirectory
         return
     }
 
@@ -87,14 +145,20 @@ function Invoke-CmdPeek {
 
     $history = @(Get-CmdPeekCommandHistory -Package $packages)
     $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath
-    $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog)
+    $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -SkipHelpProbe)
 
     $state = Get-CmdPeekState -DataDirectory $DataDirectory
     $history = @(Merge-CmdPeekFavorite -History $history -Favorite @($state.Favorites))
+    $history = @(Merge-CmdPeekHidden -History $history -Hidden @($state.Hidden))
 
     $missing = @(Find-CmdPeekMissingCommand -Previous @($state.Commands) -Current $history)
     if ($missing.Count -gt 0) {
-        Confirm-CmdPeekMissingCommand -Missing $missing -Managers $managers -NonInteractive:$NonInteractive
+        if ($useInteractive) {
+            $state = Confirm-CmdPeekMissingCommand -Missing $missing -Managers $managers -State $state
+        }
+        elseif ($NonInteractive) {
+            $state = Confirm-CmdPeekMissingCommand -Missing $missing -Managers $managers -State $state -NonInteractive
+        }
     }
 
     $state.Commands = @(
@@ -103,22 +167,135 @@ function Invoke-CmdPeek {
     $state.LastScan = (Get-Date).ToString('o')
     Save-CmdPeekState -State $state -DataDirectory $DataDirectory
 
-    if ($Search -or $Category) {
+    # Category/Search on flat inventory only. Recency paths group first, then filter rows.
+    if (($Search -or $Category) -and -not $isRecencyPath) {
         $history = @(Search-CmdPeekCommand -History $history -Query $Search -Category $Category)
     }
 
-    $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
-    if ($NonInteractive) { $useInteractive = $false }
+    if ($Recent) {
+        $sinceSpec = $Since
+        if ([string]::IsNullOrWhiteSpace($sinceSpec)) { $sinceSpec = 'last' }
+        $parsed = Convert-CmdPeekSince -Since $sinceSpec -Cursor $state.LastMcpAt
+        $cursorBefore = $state.LastMcpAt
+        $mode = 'delta'
+        $recentTake = 20
+        if ($Count -gt 0) { $recentTake = $Count }
+        $rows = @(Select-CmdPeekJustInstalled -History $history -Since $sinceSpec -Cursor $state.LastMcpAt -Count $recentTake -CommandTester $CommandTester)
+        if ($parsed.Kind -ne 'all' -and $rows.Count -eq 0) {
+            $rows = @(Select-CmdPeekJustInstalled -History $history -Since 'all' -Count $recentTake -CommandTester $CommandTester)
+            $mode = 'fallback'
+        }
+        elseif ($parsed.Kind -eq 'all') {
+            $mode = 'delta'
+        }
+        if ($Search -or $Category) {
+            $rows = @(Search-CmdPeekCommand -History $rows -Query $Search -Category $Category)
+        }
+        $rows = @(Add-CmdPeekUsageProbe -History $rows -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+        $commands = @(
+            foreach ($row in $rows) {
+                [pscustomobject]@{
+                    command        = $row.Command
+                    packageName    = $row.PackageName
+                    packageManager = $row.PackageManager
+                    installDate    = $(if ($row.InstallDate) { ([datetime]$row.InstallDate).ToString('o') } else { $null })
+                    version        = $(if ($row.PSObject.Properties['Version']) { $row.Version } else { $null })
+                    category       = $(if ($row.PSObject.Properties['Category']) { $row.Category } else { 'other' })
+                    usages         = $(if ($row.PSObject.Properties['Usages']) { @($row.Usages) } else { @() })
+                    shims          = $(if ($row.PSObject.Properties['Shims']) { @($row.Shims) } else { @() })
+                    onPath         = [bool]($row.PSObject.Properties['OnPath'] -and $row.OnPath)
+                    hidden         = $false
+                    favorite       = [bool]($row.PSObject.Properties['Favorite'] -and $row.Favorite)
+                }
+            }
+        )
+        $payload = [pscustomobject]@{
+            generatedAt = (Get-Date).ToString('o')
+            cursor      = $cursorBefore
+            mode        = $mode
+            commands    = $commands
+        }
+        if (@($commands).Count -gt 0) {
+            $state.LastMcpAt = (Get-Date).ToString('o')
+            Save-CmdPeekState -State $state -DataDirectory $DataDirectory
+        }
+        Write-Output ($payload | ConvertTo-Json -Depth 8)
+        return
+    }
+
+    if ($Json -or $Gaps) {
+        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+        $snapshot = ConvertTo-CmdPeekSnapshot -History $history -Manager @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All) -Catalog $catalog -Favorite @($state.Favorites) -Hidden @($state.Hidden) -CommandTester $CommandTester
+        if ($Gaps) {
+            Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+        }
+        else {
+            if ($Count -gt 0) {
+                $snapshot.commands = @($snapshot.commands | Select-Object -First $Count)
+            }
+            $snapshot | Add-Member lastPeekAt $state.LastPeekAt -Force
+            $snapshot | Add-Member lastMcpAt $state.LastMcpAt -Force
+            Write-Output ($snapshot | ConvertTo-Json -Depth 8)
+        }
+        return
+    }
 
     if ($useInteractive) {
-        Invoke-CmdPeekInteractive -History $history -State $state -DataDirectory $DataDirectory
+        $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog)
+        Invoke-CmdPeekInteractive -History $history -State $state -DataDirectory $DataDirectory -Gap $gapList -Catalog $catalog -HelpRunner $HelpRunner
+        return
+    }
+
+    # -Search / -Category without -n: flat list, no LastPeekAt cursor advance
+    if (-not $isRecencyPath) {
+        $flat = @(Select-CmdPeekQuickHistory -History $history -Count 0)
+        $flat = @(Add-CmdPeekUsageProbe -History $flat -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+        Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
         return
     }
 
     $take = $Count
     if ($take -le 0) { $take = 5 }
-    $slice = @($history | Select-Object -First $take)
-    Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 3)
+
+    $sinceSpec = $Since
+    if ([string]::IsNullOrWhiteSpace($sinceSpec)) { $sinceSpec = 'last' }
+
+    $parsed = Convert-CmdPeekSince -Since $sinceSpec -Cursor $state.LastPeekAt
+    $slice = @()
+    $header = ''
+    if ($parsed.Kind -eq 'all') {
+        $slice = @(Select-CmdPeekJustInstalled -History $history -Since 'all' -Count $take -CommandTester $CommandTester)
+        $header = "Last $($slice.Count) installed commands:"
+    }
+    else {
+        $slice = @(Select-CmdPeekJustInstalled -History $history -Since $sinceSpec -Cursor $state.LastPeekAt -Count $take -CommandTester $CommandTester)
+        if ($slice.Count -eq 0) {
+            $slice = @(Select-CmdPeekJustInstalled -History $history -Since 'all' -Count $take -CommandTester $CommandTester)
+            $when = $(if ($state.LastPeekAt) { $state.LastPeekAt } else { 'never' })
+            $header = "No new installs since $when. Showing last $($slice.Count) instead."
+        }
+        else {
+            $header = 'Installed since last look:'
+        }
+    }
+
+    if ($Search -or $Category) {
+        $slice = @(Search-CmdPeekCommand -History $slice -Query $Search -Category $Category)
+    }
+
+    if ($slice.Count -eq 0 -and @($history).Count -gt 0) {
+        Write-Output "No commands to show in quick view. Hidden entries still appear in interactive mode (cmdpeek); press h to unhide.`n"
+        return
+    }
+    if ($slice.Count -eq 0) {
+        Write-Output (Format-CmdPeekQuickOutput -History @() -ExampleCount 3)
+        return
+    }
+
+    $slice = @(Add-CmdPeekUsageProbe -History $slice -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+    Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 3 -Header $header)
+    $state.LastPeekAt = (Get-Date).ToString('o')
+    Save-CmdPeekState -State $state -DataDirectory $DataDirectory
 }
 
 Export-ModuleMember -Function @(
@@ -131,6 +308,8 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekState'
     'Save-CmdPeekState'
     'Set-CmdPeekFavorite'
+    'Set-CmdPeekHidden'
+    'Set-CmdPeekPreferredPackageManager'
     'Export-CmdPeekState'
     'Import-CmdPeekState'
     'Get-CmdPeekUsageExample'
@@ -139,4 +318,10 @@ Export-ModuleMember -Function @(
     'Invoke-CmdPeekInteractive'
     'Format-CmdPeekQuickOutput'
     'Install-CmdPeekTrackedPackage'
+    'Get-CmdPeekGap'
+    'Get-CmdPeekInventory'
+    'ConvertTo-CmdPeekSnapshot'
+    'Add-CmdPeekProfileHint'
+    'Convert-CmdPeekSince'
+    'Select-CmdPeekJustInstalled'
 )

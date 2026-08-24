@@ -18,7 +18,8 @@ function Format-CmdPeekQuickOutput {
         [Parameter(Mandatory)]
         [AllowEmptyCollection()]
         [object[]]$History,
-        [int]$ExampleCount = 2
+        [int]$ExampleCount = 3,
+        [string]$Header
     )
 
     $items = @($History)
@@ -26,19 +27,52 @@ function Format-CmdPeekQuickOutput {
         return "No installed commands found.`nInstall packages with scoop, choco, or winget, then run cmdpeek again."
     }
 
+    if ($ExampleCount -lt 1) { $ExampleCount = 3 }
+
+    $display = foreach ($row in $items) {
+        $raw = @()
+        if ($row.PSObject.Properties['Usages'] -and $row.Usages) {
+            $raw = @($row.Usages)
+        }
+        [pscustomobject]@{
+            Row    = $row
+            Usages = @(Select-CmdPeekDisplayUsage -Usage $raw -Count $ExampleCount)
+        }
+    }
+
+    $commentColumn = 0
+    $allParts = @(
+        $display |
+            ForEach-Object { $_.Usages } |
+            ForEach-Object { Split-CmdPeekUsage -Usage $_ }
+    )
+    if ($allParts.Count -gt 0) {
+        $commentColumn = ($allParts | ForEach-Object { $_.Command.Length } | Measure-Object -Maximum).Maximum
+    }
+
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("Last $($items.Count) installed commands:")
+    if ($Header) {
+        $lines.Add($Header)
+    }
+    else {
+        $lines.Add("Last $($items.Count) installed commands:")
+    }
     $lines.Add('')
 
     $index = 1
-    foreach ($row in $items) {
-        $lines.Add(('{0}. {1} ({2})' -f $index, $row.Command, $row.PackageManager))
-        $usages = @()
-        if ($row.PSObject.Properties['Usages'] -and $row.Usages) {
-            $usages = @($row.Usages | Select-Object -First $ExampleCount)
+    foreach ($entry in @($display)) {
+        $row = $entry.Row
+        $title = '{0}. {1} ({2})' -f $index, $row.Command, $row.PackageManager
+        if ($row.PSObject.Properties['OnPath'] -and -not $row.OnPath) {
+            $title += '  not on PATH'
         }
-        foreach ($usage in $usages) {
+        $lines.Add($title)
+        $aligned = @(Format-CmdPeekAlignedUsage -Usage $entry.Usages -Count $ExampleCount -CommentColumn $commentColumn)
+        foreach ($usage in $aligned) {
             $lines.Add(('   -  {0}' -f $usage))
+        }
+        if ($row.PSObject.Properties['Shims'] -and $row.Shims -and @($row.Shims).Count -gt 0) {
+            $lines.Add(('   also: {0}' -f ((@($row.Shims) -join ', '))))
         }
         if ($row.PSObject.Properties['Related'] -and $row.Related -and @($row.Related).Count -gt 0) {
             $lines.Add(('   suggestions: {0}' -f ((@($row.Related) | Select-Object -First 3) -join ', ')))
@@ -89,7 +123,8 @@ function Show-CmdPeekDetail {
         Clear-Host
         $date = Format-CmdPeekDate -Value $row.InstallDate
         $star = $(if ($Row.Favorite) { '*' } else { '' })
-        Write-Host ("{0}{1} (installed via {2} on {3})" -f $Row.Command, $star, $Row.PackageManager, $date) -ForegroundColor Cyan
+        $hiddenNote = $(if ($Row.PSObject.Properties['Hidden'] -and $Row.Hidden) { '  [hidden from -n]' } else { '' })
+        Write-Host ("{0}{1} (installed via {2} on {3}){4}" -f $Row.Command, $star, $Row.PackageManager, $date, $hiddenNote) -ForegroundColor Cyan
         Write-Host ''
         Write-Host 'Common Usages:' -ForegroundColor Yellow
         $usages = @()
@@ -184,8 +219,17 @@ function Invoke-CmdPeekInteractive {
         [object[]]$History,
         [object]$State,
         [string]$DataDirectory,
-        [scriptblock]$ChoiceReader
+        [scriptblock]$ChoiceReader,
+        [AllowEmptyCollection()]
+        [object[]]$Gap,
+        [hashtable]$Catalog,
+        [scriptblock]$HelpRunner
     )
+
+    if (-not $ChoiceReader -and (Test-CmdPeekTuiConsole)) {
+        Invoke-CmdPeekTui -History $History -State $State -DataDirectory $DataDirectory -Gap @($Gap) -Catalog $Catalog -HelpRunner $HelpRunner
+        return
+    }
 
     if (-not $ChoiceReader) {
         $ChoiceReader = { param($Prompt) Read-Host $Prompt }
@@ -214,6 +258,8 @@ function Invoke-CmdPeekInteractive {
             foreach ($row in $view) {
                 $date = Format-CmdPeekDate -Value $row.InstallDate
                 $star = $(if ($row.Favorite) { '*' } else { ' ' })
+                if ($row.PSObject.Properties['Hidden'] -and $row.Hidden) { $star = '-' }
+                if ($row.Favorite -and $row.PSObject.Properties['Hidden'] -and $row.Hidden) { $star = '+' }
                 $line = ('{0} {1,-18} {2,-12} {3}' -f $star, $row.Command, ('({0})' -f $row.PackageManager), $date)
                 Write-Host (' [{0}] {1}' -f $i, $line.TrimEnd())
                 $i++
@@ -221,7 +267,7 @@ function Invoke-CmdPeekInteractive {
         }
 
         Write-Host ''
-        Write-Host '  # Open   / Search   C Category   F Favorite   A All   E Export   Q Quit' -ForegroundColor DarkGray
+        Write-Host '  # Open   / Search   C Category   F Favorite   H Hide   A All   E Export   Q Quit' -ForegroundColor DarkGray
         Write-Host ''
 
         $choice = & $ChoiceReader '>'
@@ -285,9 +331,28 @@ function Invoke-CmdPeekInteractive {
             continue
         }
 
+        if ($trim -match '^[Hh]$') {
+            if ($view.Count -eq 0) { continue }
+            $pick = [string](& $ChoiceReader 'Number to hide/unhide from quick view (-n)')
+            if ([string]::IsNullOrWhiteSpace($pick)) { continue }
+            $idx = 0
+            if ([int]::TryParse($pick, [ref]$idx) -and $idx -ge 1 -and $idx -le $view.Count) {
+                $cmd = $view[$idx - 1].Command
+                $nowHidden = -not [bool]($view[$idx - 1].PSObject.Properties['Hidden'] -and $view[$idx - 1].Hidden)
+                if ($State) {
+                    $State = Set-CmdPeekHidden -State $State -Command $cmd -Hidden $nowHidden
+                    Save-CmdPeekState -State $State -DataDirectory $DataDirectory
+                    $all = @(Merge-CmdPeekHidden -History $all -Hidden @($State.Hidden))
+                }
+            }
+            continue
+        }
+
         $idx = 0
         if ([int]::TryParse($trim, [ref]$idx) -and $idx -ge 1 -and $idx -le $view.Count) {
-            $result = Show-CmdPeekDetail -Row $view[$idx - 1]
+            $picked = $view[$idx - 1]
+            [void](Add-CmdPeekUsageProbe -History @($picked) -Catalog $Catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+            $result = Show-CmdPeekDetail -Row $picked
             if ($result -eq 'quit') { return }
         }
     }
@@ -325,11 +390,12 @@ function Confirm-CmdPeekMissingCommand {
         [AllowEmptyCollection()]
         [object[]]$Missing,
         [object[]]$Managers,
+        [object]$State,
         [switch]$NonInteractive
     )
 
     $rows = @($Missing)
-    if ($rows.Count -eq 0) { return }
+    if ($rows.Count -eq 0) { return $State }
 
     $available = @($Managers | Where-Object { $_.Present } | Select-Object -ExpandProperty Name)
     if ($available.Count -eq 0) {
@@ -349,6 +415,9 @@ function Confirm-CmdPeekMissingCommand {
             $manager = $row.PackageManager
             if ($available -notcontains $manager) { $manager = $available[0] }
             [void](Install-CmdPeekTrackedPackage -PackageName $pkg -PackageManager $manager)
+            if ($State) {
+                $State = Set-CmdPeekPreferredPackageManager -State $State -PackageManager $manager
+            }
             continue
         }
         if ($answer -match '^[Nn]') { continue }
@@ -357,8 +426,13 @@ function Confirm-CmdPeekMissingCommand {
         if ($picked -eq 'choco') { $picked = 'chocolatey' }
         if (@('chocolatey', 'scoop', 'winget') -contains $picked) {
             [void](Install-CmdPeekTrackedPackage -PackageName $pkg -PackageManager $picked)
+            if ($State) {
+                $State = Set-CmdPeekPreferredPackageManager -State $State -PackageManager $picked
+            }
         }
     }
+
+    return $State
 }
 
 function Show-CmdPeekNoManagerPrompt {

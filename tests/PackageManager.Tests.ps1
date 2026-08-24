@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 BeforeAll {
     $src = Join-Path $PSScriptRoot '..\src'
     . (Join-Path $src 'PackageManager.ps1')
+    . (Join-Path $src 'UsageExamples.ps1')
 }
 
 Describe 'Get-CmdPeekPackageManager' {
@@ -115,12 +116,56 @@ Describe 'Get-CmdPeekInstalledPackage' {
         New-Item -ItemType File -Force -Path (Join-Path $pkg 'git.exe') | Out-Null
         (Get-Item $pkg).LastWriteTime = [datetime]'2025-08-16T12:00:00'
 
-        $result = @(Get-CmdPeekInstalledPackage -WinGetRoot $script:wingetRoot -EnabledManagers @('winget'))
+        $result = @(Get-CmdPeekInstalledPackage `
+            -WinGetRoot $script:wingetRoot `
+            -EnabledManagers @('winget') `
+            -CommandTester { param($Name) $Name -eq 'git' })
         $result.Count | Should -Be 1
         $result[0].Name | Should -Be 'Git.Git'
         $result[0].PackageManager | Should -Be 'winget'
         $result[0].Commands | Should -Contain 'git'
         $result[0].InstallDate | Should -Be ([datetime]'2025-08-16T12:00:00')
+    }
+
+    It 'keeps a WinGet console CLI that the command tester can resolve' {
+        $cmd = $env:ComSpec
+        if (-not (Test-Path -LiteralPath $cmd)) { return }
+        $pkg = Join-Path $script:wingetRoot 'Acme.MyTool_8wekyb3d8bbwe'
+        New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+        Copy-Item -LiteralPath $cmd -Destination (Join-Path $pkg 'mytool.exe')
+
+        $result = @(Get-CmdPeekInstalledPackage `
+            -WinGetRoot $script:wingetRoot `
+            -EnabledManagers @('winget') `
+            -CommandTester { param($Name) $Name -eq 'mytool' })
+        $result.Count | Should -Be 1
+        $result[0].Commands | Should -Contain 'mytool'
+    }
+
+    It 'skips WinGet GUI executables even when the command tester accepts them' {
+        $notepad = Join-Path $env:SystemRoot 'System32\notepad.exe'
+        if (-not (Test-Path -LiteralPath $notepad)) { return }
+        $pkg = Join-Path $script:wingetRoot 'LogExpert.LogExpert_8wekyb3d8bbwe'
+        New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+        Copy-Item -LiteralPath $notepad -Destination (Join-Path $pkg 'LogExpert.exe')
+
+        $result = @(Get-CmdPeekInstalledPackage `
+            -WinGetRoot $script:wingetRoot `
+            -EnabledManagers @('winget') `
+            -CommandTester { $true })
+        $result.Count | Should -Be 0
+    }
+
+    It 'skips WinGet helper executables that are not on PATH' {
+        $pkg = Join-Path $script:wingetRoot 'Vendor.Helper_8wekyb3d8bbwe'
+        New-Item -ItemType Directory -Force -Path $pkg | Out-Null
+        New-Item -ItemType File -Force -Path (Join-Path $pkg 'vendor-helper.exe') | Out-Null
+
+        $result = @(Get-CmdPeekInstalledPackage `
+            -WinGetRoot $script:wingetRoot `
+            -EnabledManagers @('winget') `
+            -CommandTester { $false })
+        $result.Count | Should -Be 0
     }
 
     It 'merges packages from every enabled manager' {

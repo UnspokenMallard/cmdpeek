@@ -34,7 +34,10 @@ Thanks for helping. cmdpeek is a PowerShell 5.1-compatible Windows CLI. Keep tha
 | `src/UsageExamples.ps1` | Catalog + help fallback |
 | `src/Config.ps1` | `%LOCALAPPDATA%\cmdpeek` state |
 | `src/InteractiveMode.ps1` | Menus, reinstall prompts |
-| `examples/usage-examples.json` | Curated usages |
+| `src/Tui.ps1` | Arrow-key TUI |
+| `src/Inventory.ps1` | JSON snapshot + gap analysis |
+| `mcp/` | MCP server for AI tools |
+| `docs/TASKS.md` | Improvement backlog (actionable checkboxes) |
 
 New popular tools belong in the JSON catalog, not hardcoded in PowerShell.
 

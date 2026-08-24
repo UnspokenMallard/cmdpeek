@@ -11,8 +11,10 @@ Describe 'Get-CmdPeekState' {
         $dir = Join-Path $TestDrive 'fresh'
         $state = Get-CmdPeekState -DataDirectory $dir
         $state.Favorites | Should -Be @()
+        $state.Hidden | Should -Be @()
         $state.PreferredPackageManager | Should -BeNullOrEmpty
-        $state.TelemetryEnabled | Should -BeFalse
+        $state.PSObject.Properties.Name | Should -Not -Contain 'TelemetryEnabled'
+        $state.PSObject.Properties.Name | Should -Not -Contain 'ExampleUsageCounts'
         $state.Commands | Should -Be @()
     }
 
@@ -20,6 +22,7 @@ Describe 'Get-CmdPeekState' {
         $dir = Join-Path $TestDrive 'roundtrip'
         $state = Get-CmdPeekState -DataDirectory $dir
         $state.Favorites = @('fd', 'jq')
+        $state.Hidden = @('logexpert')
         $state.PreferredPackageManager = 'scoop'
         $state.Commands = @(
             [pscustomobject]@{
@@ -33,8 +36,28 @@ Describe 'Get-CmdPeekState' {
 
         $loaded = Get-CmdPeekState -DataDirectory $dir
         $loaded.Favorites | Should -Be @('fd', 'jq')
+        $loaded.Hidden | Should -Be @('logexpert')
         $loaded.PreferredPackageManager | Should -Be 'scoop'
         $loaded.Commands[0].Command | Should -Be 'fd'
+    }
+
+    It 'round-trips LastPeekAt and LastMcpAt without treating LastScan as a recency cursor' {
+        $dir = Join-Path $TestDrive 'cursors'
+        $state = Get-CmdPeekState -DataDirectory $dir
+        $state.PSObject.Properties.Name | Should -Contain 'LastPeekAt'
+        $state.PSObject.Properties.Name | Should -Contain 'LastMcpAt'
+        $state.LastPeekAt | Should -BeNullOrEmpty
+        $state.LastMcpAt | Should -BeNullOrEmpty
+
+        $state.LastPeekAt = '2026-08-24T10:00:00.0000000Z'
+        $state.LastMcpAt = '2026-08-24T11:00:00.0000000Z'
+        $state.LastScan = '2026-08-24T12:00:00.0000000Z'
+        Save-CmdPeekState -State $state -DataDirectory $dir
+
+        $loaded = Get-CmdPeekState -DataDirectory $dir
+        $loaded.LastPeekAt | Should -Be '2026-08-24T10:00:00.0000000Z'
+        $loaded.LastMcpAt | Should -Be '2026-08-24T11:00:00.0000000Z'
+        $loaded.LastScan | Should -Be '2026-08-24T12:00:00.0000000Z'
     }
 }
 
@@ -46,6 +69,17 @@ Describe 'Set-CmdPeekFavorite' {
         $state.Favorites | Should -Contain 'rg'
         $state = Set-CmdPeekFavorite -State $state -Command 'rg' -Favorite $false
         $state.Favorites | Should -Not -Contain 'rg'
+    }
+}
+
+Describe 'Set-CmdPeekHidden' {
+    It 'adds and removes a command hidden from quick view' {
+        $dir = Join-Path $TestDrive 'hide'
+        $state = Get-CmdPeekState -DataDirectory $dir
+        $state = Set-CmdPeekHidden -State $state -Command 'logexpert' -Hidden $true
+        $state.Hidden | Should -Contain 'logexpert'
+        $state = Set-CmdPeekHidden -State $state -Command 'logexpert' -Hidden $false
+        $state.Hidden | Should -Not -Contain 'logexpert'
     }
 }
 
@@ -64,5 +98,27 @@ Describe 'Export-CmdPeekState / Import-CmdPeekState' {
         Import-CmdPeekState -Path $exportPath -DataDirectory $other
         $loaded = Get-CmdPeekState -DataDirectory $other
         $loaded.Favorites | Should -Contain 'jq'
+    }
+}
+
+Describe 'Add-CmdPeekProfileHint' {
+    It 'appends the install hint to a profile once' {
+        $profilePath = Join-Path $TestDrive 'Microsoft.PowerShell_profile.ps1'
+        Add-CmdPeekProfileHint -ProfilePath $profilePath
+        Add-CmdPeekProfileHint -ProfilePath $profilePath
+        $text = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8
+        $text | Should -Match 'Invoke-CmdPeekHint'
+        $text | Should -Match 'cmdpeek -NonInteractive -n 1'
+        ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
+    }
+}
+
+Describe 'Set-CmdPeekPreferredPackageManager' {
+    It 'stores chocolatey, scoop, or winget as the preferred manager' {
+        $state = Get-CmdPeekDefaultState
+        $state = Set-CmdPeekPreferredPackageManager -State $state -PackageManager 'scoop'
+        $state.PreferredPackageManager | Should -Be 'scoop'
+        $state = Set-CmdPeekPreferredPackageManager -State $state -PackageManager 'chocolatey'
+        $state.PreferredPackageManager | Should -Be 'chocolatey'
     }
 }

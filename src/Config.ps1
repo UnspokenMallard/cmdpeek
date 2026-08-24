@@ -24,15 +24,18 @@ function Get-CmdPeekDefaultState {
     [CmdletBinding()]
     param()
 
+    # Schema v1 fields actually used. TelemetryEnabled and ExampleUsageCounts were
+    # stored in earlier drafts and are ignored on load (not written back).
     return [pscustomobject]@{
         SchemaVersion             = 1
         Favorites                 = @()
+        Hidden                    = @()
         PreferredPackageManager   = $null
-        TelemetryEnabled          = $false
         CacheTtlHours             = 24
         LastScan                  = $null
+        LastPeekAt                = $null
+        LastMcpAt                 = $null
         Commands                  = @()
-        ExampleUsageCounts        = [pscustomobject]@{}
     }
 }
 
@@ -58,23 +61,35 @@ function Get-CmdPeekState {
     if ($raw.PSObject.Properties['Favorites'] -and $raw.Favorites) {
         $state.Favorites = @($raw.Favorites | ForEach-Object { [string]$_ })
     }
+    if ($raw.PSObject.Properties['Hidden'] -and $raw.Hidden) {
+        $state.Hidden = @($raw.Hidden | ForEach-Object { [string]$_ })
+    }
     if ($raw.PSObject.Properties['PreferredPackageManager']) {
         $state.PreferredPackageManager = $raw.PreferredPackageManager
-    }
-    if ($raw.PSObject.Properties['TelemetryEnabled']) {
-        $state.TelemetryEnabled = [bool]$raw.TelemetryEnabled
     }
     if ($raw.PSObject.Properties['CacheTtlHours'] -and $raw.CacheTtlHours) {
         $state.CacheTtlHours = [int]$raw.CacheTtlHours
     }
     if ($raw.PSObject.Properties['LastScan']) {
         $state.LastScan = $raw.LastScan
+        if ($state.LastScan -is [datetime]) {
+            $state.LastScan = $state.LastScan.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+        }
+    }
+    if ($raw.PSObject.Properties['LastPeekAt']) {
+        $state.LastPeekAt = $raw.LastPeekAt
+        if ($state.LastPeekAt -is [datetime]) {
+            $state.LastPeekAt = $state.LastPeekAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+        }
+    }
+    if ($raw.PSObject.Properties['LastMcpAt']) {
+        $state.LastMcpAt = $raw.LastMcpAt
+        if ($state.LastMcpAt -is [datetime]) {
+            $state.LastMcpAt = $state.LastMcpAt.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+        }
     }
     if ($raw.PSObject.Properties['Commands'] -and $raw.Commands) {
         $state.Commands = @($raw.Commands)
-    }
-    if ($raw.PSObject.Properties['ExampleUsageCounts'] -and $raw.ExampleUsageCounts) {
-        $state.ExampleUsageCounts = $raw.ExampleUsageCounts
     }
     if ($raw.PSObject.Properties['SchemaVersion'] -and $raw.SchemaVersion) {
         $state.SchemaVersion = [int]$raw.SchemaVersion
@@ -127,6 +142,46 @@ function Set-CmdPeekFavorite {
     return $State
 }
 
+function Set-CmdPeekHidden {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$State,
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [Parameter(Mandatory)]
+        [bool]$Hidden
+    )
+
+    $current = @($State.Hidden | Where-Object { $_ })
+    $needle = $Command.ToLowerInvariant()
+    if ($Hidden) {
+        if (-not ($current | Where-Object { $_.ToLowerInvariant() -eq $needle })) {
+            $current += $Command
+        }
+    }
+    else {
+        $current = @($current | Where-Object { $_.ToLowerInvariant() -ne $needle })
+    }
+
+    $State.Hidden = @($current)
+    return $State
+}
+
+function Set-CmdPeekPreferredPackageManager {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [object]$State,
+        [Parameter(Mandatory)]
+        [ValidateSet('chocolatey', 'scoop', 'winget')]
+        [string]$PackageManager
+    )
+
+    $State.PreferredPackageManager = $PackageManager
+    return $State
+}
+
 function Export-CmdPeekState {
     [CmdletBinding()]
     param(
@@ -158,4 +213,54 @@ function Import-CmdPeekState {
 
     $imported = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
     Save-CmdPeekState -State $imported -DataDirectory $DataDirectory
+}
+
+function Add-CmdPeekProfileHint {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ProfilePath
+    )
+
+    $marker = 'BEGIN cmdpeek hint'
+    $snippet = @'
+# BEGIN cmdpeek hint
+function Invoke-CmdPeekHint {
+    if (Get-Command cmdpeek -ErrorAction SilentlyContinue) {
+        cmdpeek -NonInteractive -n 1
+    }
+}
+function scoop {
+    $app = Get-Command scoop -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'scoop not found on PATH' }
+    & $app.Source @args
+    if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
+}
+function choco {
+    $app = Get-Command choco -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'choco not found on PATH' }
+    & $app.Source @args
+    if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
+}
+# END cmdpeek hint
+'@
+
+    $parent = Split-Path -Parent $ProfilePath
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+
+    $existing = ''
+    if (Test-Path -LiteralPath $ProfilePath) {
+        $existing = Get-Content -LiteralPath $ProfilePath -Raw -Encoding UTF8
+        if ($existing -and $existing.Contains($marker)) {
+            return
+        }
+    }
+
+    $block = $snippet.TrimEnd() + [Environment]::NewLine
+    if ($existing -and -not $existing.EndsWith("`n")) {
+        $block = [Environment]::NewLine + $block
+    }
+    Add-Content -LiteralPath $ProfilePath -Value $block -Encoding UTF8
 }

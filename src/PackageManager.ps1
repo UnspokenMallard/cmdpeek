@@ -239,10 +239,19 @@ function Get-CmdPeekWinGetPackage {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$WinGetRoot
+        [string]$WinGetRoot,
+        [scriptblock]$CommandTester
     )
 
     if (-not (Test-Path -LiteralPath $WinGetRoot)) { return @() }
+
+    $tester = $CommandTester
+    if (-not $tester) {
+        $tester = {
+            param($Name)
+            return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
+        }
+    }
 
     $packages = foreach ($pkgDir in Get-ChildItem -LiteralPath $WinGetRoot -Directory -ErrorAction SilentlyContinue) {
         $id = ($pkgDir.Name -split '_')[0]
@@ -256,7 +265,18 @@ function Get-CmdPeekWinGetPackage {
                 }
         )
 
-        $commands = @($exe | ForEach-Object { $_.BaseName } | Select-Object -Unique)
+        $commands = New-Object System.Collections.Generic.List[string]
+        foreach ($file in $exe) {
+            $name = $file.BaseName
+            if (Get-Command Get-CmdPeekPeSubsystem -ErrorAction SilentlyContinue) {
+                $subsystem = Get-CmdPeekPeSubsystem -Path $file.FullName
+                if ($subsystem -eq 2) { continue }
+            }
+            $visible = $false
+            try { $visible = [bool](& $tester $name) } catch { $visible = $false }
+            if (-not $visible) { continue }
+            if ($commands -notcontains $name) { [void]$commands.Add($name) }
+        }
         if ($commands.Count -eq 0) { continue }
 
         [pscustomobject]@{
@@ -301,7 +321,7 @@ function Get-CmdPeekInstalledPackage {
                 foreach ($pkg in @(Get-CmdPeekChocolateyPackage -ChocolateyRoot $ChocolateyRoot)) { $packages.Add($pkg) }
             }
             'winget' {
-                foreach ($pkg in @(Get-CmdPeekWinGetPackage -WinGetRoot $WinGetRoot)) { $packages.Add($pkg) }
+                foreach ($pkg in @(Get-CmdPeekWinGetPackage -WinGetRoot $WinGetRoot -CommandTester $CommandTester)) { $packages.Add($pkg) }
             }
         }
     }

@@ -11,7 +11,9 @@
 param(
     [string]$InstallDir,
     [switch]$AddToPath,
-    [switch]$SkipPath
+    [switch]$SkipPath,
+    [switch]$AddProfileHint,
+    [string]$ProfilePath
 )
 
 Set-StrictMode -Version Latest
@@ -96,3 +98,14 @@ Write-Host ''
 Write-Host "cmdpeek installed to $InstallDir" -ForegroundColor Green
 Write-Host 'Try:  cmdpeek 5'
 Write-Host '      cmdpeek -i'
+
+if ($AddProfileHint) {
+    . (Join-Path $moduleDest 'Config.ps1')
+    $target = $ProfilePath
+    if (-not $target) { $target = $PROFILE }
+    Add-CmdPeekProfileHint -ProfilePath $target
+    Write-Host "Added scoop/choco install hint to $target"
+}
+else {
+    Write-Host 'Optional:  .\install.ps1 -AddProfileHint   (print cmdpeek -n 1 after scoop/choco install)'
+}

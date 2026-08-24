@@ -17,6 +17,8 @@
         'Get-CmdPeekState'
         'Save-CmdPeekState'
         'Set-CmdPeekFavorite'
+        'Set-CmdPeekHidden'
+        'Set-CmdPeekPreferredPackageManager'
         'Export-CmdPeekState'
         'Import-CmdPeekState'
         'Get-CmdPeekUsageExample'
@@ -25,6 +27,12 @@
         'Invoke-CmdPeekInteractive'
         'Format-CmdPeekQuickOutput'
         'Install-CmdPeekTrackedPackage'
+        'Get-CmdPeekGap'
+        'Get-CmdPeekInventory'
+        'ConvertTo-CmdPeekSnapshot'
+        'Add-CmdPeekProfileHint'
+        'Convert-CmdPeekSince'
+        'Select-CmdPeekJustInstalled'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
