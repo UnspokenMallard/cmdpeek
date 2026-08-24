@@ -1,0 +1,23 @@
+{
+  "version": "0.1.0",
+  "description": "Show recently installed CLI commands from Chocolatey, Scoop, and WinGet, with common usage examples.",
+  "homepage": "https://github.com/cmdpeek/cmdpeek",
+  "license": "MIT",
+  "notes": [
+    "Until a GitHub release exists, install from a local clone:",
+    "  scoop install .\\scoop\\cmdpeek.json",
+    "or use the standalone installer:  .\\install.ps1"
+  ],
+  "url": "https://github.com/cmdpeek/cmdpeek/archive/refs/heads/main.zip",
+  "extract_dir": "cmdpeek-main",
+  "bin": [
+    ["src\\cmdpeek.ps1", "cmdpeek"]
+  ],
+  "checkver": {
+    "github": "https://github.com/cmdpeek/cmdpeek"
+  },
+  "autoupdate": {
+    "url": "https://github.com/cmdpeek/cmdpeek/archive/refs/tags/v$version.zip",
+    "extract_dir": "cmdpeek-$version"
+  }
+}

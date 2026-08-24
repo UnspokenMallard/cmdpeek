@@ -1,0 +1,41 @@
+# WinGet manifest template (0.1.0)
+# Submit the generated multi-file manifests to microsoft/winget-pkgs.
+# This single-file sketch documents the package identity and installer story.
+#
+# PackageIdentifier: cmdpeek.cmdpeek
+# PackageVersion: 0.1.0
+# Publisher: cmdpeek
+# ShortDescription: Recently installed CLI commands and common usages
+#
+# Until a signed GitHub release exists, install with:
+#   irm https://raw.githubusercontent.com/cmdpeek/cmdpeek/main/install.ps1 | iex
+# or from a clone:
+#   .\install.ps1
+
+PackageIdentifier: cmdpeek.cmdpeek
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: cmdpeek
+PublisherUrl: https://github.com/cmdpeek/cmdpeek
+PublisherSupportUrl: https://github.com/cmdpeek/cmdpeek/issues
+Author: cmdpeek contributors
+PackageName: cmdpeek
+License: MIT
+LicenseUrl: https://opensource.org/licenses/MIT
+ShortDescription: Show recently installed CLI commands from Chocolatey, Scoop, and WinGet with common usage examples.
+Moniker: cmdpeek
+Tags:
+  - cli
+  - powershell
+  - scoop
+  - chocolatey
+  - winget
+Installers:
+  - Architecture: x64
+    InstallerType: portable
+    InstallerUrl: https://github.com/cmdpeek/cmdpeek/archive/refs/heads/main.zip
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    Commands:
+      - cmdpeek
+ManifestType: singleton
+ManifestVersion: 1.6.0
