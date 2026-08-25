@@ -168,8 +168,14 @@ function Invoke-CmdPeek {
     Save-CmdPeekState -State $state -DataDirectory $DataDirectory
 
     # Category/Search on flat inventory only. Recency paths group first, then filter rows.
-    if (($Search -or $Category) -and -not $isRecencyPath) {
+    # Human exact-search skips early substring so hidden rows stay eligible for Select-CmdPeekExactCommand.
+    $searchPathExact = [bool]$Search -and -not $isRecencyPath -and -not $Json -and -not $Gaps -and -not $useInteractive
+
+    if (($Search -or $Category) -and -not $isRecencyPath -and -not $searchPathExact) {
         $history = @(Search-CmdPeekCommand -History $history -Query $Search -Category $Category)
+    }
+    elseif ($searchPathExact -and $Category) {
+        $history = @(Search-CmdPeekCommand -History $history -Category $Category)
     }
 
     if ($Recent) {
@@ -248,6 +254,34 @@ function Invoke-CmdPeek {
 
     # -Search / -Category without -n: flat list, no LastPeekAt cursor advance
     if (-not $isRecencyPath) {
+        if ($Search) {
+            $exact = @(Select-CmdPeekExactCommand -History $history -Query $Search)
+            if ($exact.Count -eq 1) {
+                $row = $exact[0]
+                $onPath = Test-CmdPeekOnPath -Command $row.Command -CommandTester $CommandTester
+                $row | Add-Member -NotePropertyName OnPath -NotePropertyValue $onPath -Force
+                $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog)
+                $missing = @(
+                    $gapList |
+                        Where-Object {
+                            $_ -and $_.kind -eq 'missing-related' -and
+                            @($_.relatedTo) -contains $row.Command
+                        } |
+                        ForEach-Object { [string]$_.command }
+                )
+                $row | Add-Member -NotePropertyName MissingRelated -NotePropertyValue $missing -Force
+                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+                Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 5 -CheatSheet)
+                return
+            }
+            if ($exact.Count -gt 1) {
+                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+                Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
+                return
+            }
+            $history = @(Search-CmdPeekCommand -History $history -Query $Search -Category $Category)
+        }
+
         $flat = @(Select-CmdPeekQuickHistory -History $history -Count 0)
         $flat = @(Add-CmdPeekUsageProbe -History $flat -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
         Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
@@ -305,6 +339,7 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekCommandHistory'
     'Find-CmdPeekMissingCommand'
     'Search-CmdPeekCommand'
+    'Select-CmdPeekExactCommand'
     'Get-CmdPeekState'
     'Save-CmdPeekState'
     'Set-CmdPeekFavorite'

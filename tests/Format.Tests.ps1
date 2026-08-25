@@ -79,4 +79,29 @@ Describe 'Format-CmdPeekQuickOutput' {
         $text | Should -Match 'not on PATH'
         $text | Should -Match 'also: ffprobe, ffplay'
     }
+
+    It 'prints a cheat sheet title without an index and uses MissingRelated as gaps' {
+        $history = @(
+            [pscustomobject]@{
+                Command        = 'fd'
+                PackageManager = 'scoop'
+                OnPath         = $true
+                Usages         = @(
+                    'fd <pattern> # Find files'
+                    'fd -t f <pattern> # Find files only'
+                )
+                Related        = @('rg', 'fzf')
+                MissingRelated = @('rg', 'fzf')
+                Shims          = @('should-not-appear')
+            }
+        )
+        $text = Format-CmdPeekQuickOutput -History $history -ExampleCount 5 -CheatSheet
+        $text | Should -Match '^fd \(scoop\)'
+        $text | Should -Not -Match '^\d+\. fd'
+        $text | Should -Not -Match 'Last \d+ installed commands'
+        $text | Should -Not -Match 'also:'
+        $text | Should -Not -Match 'suggestions:'
+        $text | Should -Match 'gaps: rg, fzf'
+        $text | Should -Match 'Find files'
+    }
 }

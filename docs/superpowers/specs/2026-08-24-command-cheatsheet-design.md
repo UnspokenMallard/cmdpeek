@@ -1,7 +1,7 @@
 # Command cheat sheet (`cmdpeek fd`)
 
 Date: 2026-08-24  
-Status: draft (awaiting user review)
+Status: spec approved; implementation plan at `docs/superpowers/plans/2026-08-24-command-cheatsheet.md`
 
 ## Goal
 

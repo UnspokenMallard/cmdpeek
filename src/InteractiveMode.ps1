@@ -19,7 +19,8 @@ function Format-CmdPeekQuickOutput {
         [AllowEmptyCollection()]
         [object[]]$History,
         [int]$ExampleCount = 3,
-        [string]$Header
+        [string]$Header,
+        [switch]$CheatSheet
     )
 
     $items = @($History)
@@ -51,18 +52,25 @@ function Format-CmdPeekQuickOutput {
     }
 
     $lines = New-Object System.Collections.Generic.List[string]
-    if ($Header) {
-        $lines.Add($Header)
+    if (-not $CheatSheet) {
+        if ($Header) {
+            $lines.Add($Header)
+        }
+        else {
+            $lines.Add("Last $($items.Count) installed commands:")
+        }
+        $lines.Add('')
     }
-    else {
-        $lines.Add("Last $($items.Count) installed commands:")
-    }
-    $lines.Add('')
 
     $index = 1
     foreach ($entry in @($display)) {
         $row = $entry.Row
-        $title = '{0}. {1} ({2})' -f $index, $row.Command, $row.PackageManager
+        if ($CheatSheet) {
+            $title = '{0} ({1})' -f $row.Command, $row.PackageManager
+        }
+        else {
+            $title = '{0}. {1} ({2})' -f $index, $row.Command, $row.PackageManager
+        }
         if ($row.PSObject.Properties['OnPath'] -and -not $row.OnPath) {
             $title += '  not on PATH'
         }
@@ -71,10 +79,19 @@ function Format-CmdPeekQuickOutput {
         foreach ($usage in $aligned) {
             $lines.Add(('   -  {0}' -f $usage))
         }
-        if ($row.PSObject.Properties['Shims'] -and $row.Shims -and @($row.Shims).Count -gt 0) {
+        if (-not $CheatSheet -and $row.PSObject.Properties['Shims'] -and $row.Shims -and @($row.Shims).Count -gt 0) {
             $lines.Add(('   also: {0}' -f ((@($row.Shims) -join ', '))))
         }
-        if ($row.PSObject.Properties['Related'] -and $row.Related -and @($row.Related).Count -gt 0) {
+        if ($CheatSheet) {
+            $missing = @()
+            if ($row.PSObject.Properties['MissingRelated'] -and $row.MissingRelated) {
+                $missing = @($row.MissingRelated | Where-Object { $_ })
+            }
+            if ($missing.Count -gt 0) {
+                $lines.Add(('   gaps: {0}' -f ($missing -join ', ')))
+            }
+        }
+        elseif ($row.PSObject.Properties['Related'] -and $row.Related -and @($row.Related).Count -gt 0) {
             $lines.Add(('   suggestions: {0}' -f ((@($row.Related) | Select-Object -First 3) -join ', ')))
         }
         $lines.Add('')

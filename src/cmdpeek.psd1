@@ -14,6 +14,7 @@
         'Get-CmdPeekCommandHistory'
         'Find-CmdPeekMissingCommand'
         'Search-CmdPeekCommand'
+        'Select-CmdPeekExactCommand'
         'Get-CmdPeekState'
         'Save-CmdPeekState'
         'Set-CmdPeekFavorite'

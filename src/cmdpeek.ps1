@@ -67,6 +67,7 @@ Usage:
   cmdpeek -Since 7d       Window: last|all|ISO|24h|7d (not minutes)
   cmdpeek -i              Interactive mode
   cmdpeek -Search rg      Filter by name
+  cmdpeek fd              Cheat sheet if that name is unique; else search
   cmdpeek -Category media Filter by category
   cmdpeek --reinstall fd  Reinstall a tracked package
   cmdpeek -Json               Full inventory JSON (MCP / scripts)

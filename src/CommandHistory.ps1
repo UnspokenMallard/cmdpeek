@@ -128,6 +128,27 @@ function Search-CmdPeekCommand {
     return $rows
 }
 
+function Select-CmdPeekExactCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$History,
+        [string]$Query
+    )
+
+    $q = ''
+    if ($null -ne $Query) { $q = ([string]$Query).Trim() }
+    if ([string]::IsNullOrWhiteSpace($q)) { return @() }
+
+    $needle = $q.ToLowerInvariant()
+    return @(
+        @($History) | Where-Object {
+            $_ -and ([string]$_.Command).ToLowerInvariant() -eq $needle
+        }
+    )
+}
+
 function Merge-CmdPeekFavorite {
     [CmdletBinding()]
     param(

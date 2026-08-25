@@ -317,3 +317,30 @@ Describe 'Select-CmdPeekJustInstalled' {
         $row.OnPath | Should -BeFalse
     }
 }
+
+Describe 'Select-CmdPeekExactCommand' {
+    It 'returns the one row whose Command equals the query' {
+        $history = @(
+            [pscustomobject]@{ Command = 'fd'; PackageManager = 'scoop' }
+            [pscustomobject]@{ Command = 'ffmpeg'; PackageManager = 'scoop' }
+        )
+        $hits = @(Select-CmdPeekExactCommand -History $history -Query 'FD')
+        $hits.Count | Should -Be 1
+        $hits[0].Command | Should -Be 'fd'
+    }
+
+    It 'returns both dual-manager rows with the same command name' {
+        $history = @(
+            [pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop' }
+            [pscustomobject]@{ Command = 'jq'; PackageManager = 'chocolatey' }
+        )
+        @(Select-CmdPeekExactCommand -History $history -Query 'jq').Count | Should -Be 2
+    }
+
+    It 'returns nothing when the query only appears in other fields' {
+        $history = @(
+            [pscustomobject]@{ Command = 'fd'; PackageManager = 'scoop'; Usages = @('fd <pattern> # Find') }
+        )
+        @(Select-CmdPeekExactCommand -History $history -Query 'pattern').Count | Should -Be 0
+    }
+}

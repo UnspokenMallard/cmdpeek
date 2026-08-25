@@ -544,6 +544,117 @@ Describe 'Invoke-CmdPeek' {
         $state = Get-CmdPeekState -DataDirectory $data
         $state.PreferredPackageManager | Should -Be 'chocolatey'
     }
+
+    It 'shows a cheat sheet for a unique exact command search without advancing LastPeekAt' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-exact-fd'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\fd')).LastWriteTime = [datetime]'2025-08-19T00:00:00'
+
+        $data = Join-Path $TestDrive 'exact-fd-data'
+        $seeded = '2025-08-10T00:00:00.0000000Z'
+        $state = Get-CmdPeekState -DataDirectory $data
+        $state.LastPeekAt = $seeded
+        Save-CmdPeekState -State $state -DataDirectory $data
+
+        $output = Invoke-CmdPeek -Search fd -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-exact-fd') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-exact-fd') `
+            -DataDirectory $data `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+
+        $text = $output | Out-String
+        $text | Should -Match 'fd \(scoop\)'
+        $text | Should -Match 'Find files'
+        $text | Should -Not -Match 'Last \d+ installed commands'
+        $text | Should -Not -Match '(?m)^\d+\. fd'
+
+        $after = Get-CmdPeekState -DataDirectory $data
+        $after.LastPeekAt | Should -Be $seeded
+    }
+
+    It 'lists dual-manager exact matches as a numbered list without cheat sheet' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-dual-jq'
+        $chocoRoot = Join-Path $TestDrive 'choco-dual-jq'
+        $scoopApp = Join-Path $scoopRoot 'apps\jq\current'
+        $lib = Join-Path $chocoRoot 'lib\jq'
+        $bin = Join-Path $chocoRoot 'bin'
+        New-Item -ItemType Directory -Force -Path $scoopApp, $lib, $bin | Out-Null
+        '{"version":"1.7.1","bin":"jq.exe"}' | Set-Content -Path (Join-Path $scoopApp 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\jq')).LastWriteTime = [datetime]'2025-08-19T00:00:00'
+        '<package><metadata><id>jq</id><version>1.7.1</version></metadata></package>' |
+            Set-Content -Path (Join-Path $lib 'jq.nuspec') -Encoding UTF8
+        New-Item -ItemType File -Force -Path (Join-Path $bin 'jq.exe') | Out-Null
+        (Get-Item $lib).LastWriteTime = [datetime]'2025-08-18T09:00:00'
+
+        $output = Invoke-CmdPeek -Search jq -NonInteractive `
+            -EnabledManagers @('scoop', 'chocolatey') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot $chocoRoot `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-dual-jq') `
+            -DataDirectory (Join-Path $TestDrive 'dual-jq-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+
+        $text = $output | Out-String
+        $text | Should -Match 'scoop'
+        $text | Should -Match 'chocolatey'
+        $text | Should -Match '(?m)^\d+\. jq'
+        (@([regex]::Matches($text, '(?m)^\d+\. jq')).Count) | Should -Be 2
+    }
+
+    It 'falls back to numbered list when search matches usage text only' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-usage-pattern'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\fd')).LastWriteTime = [datetime]'2025-08-19T00:00:00'
+
+        $output = Invoke-CmdPeek -Search pattern -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-usage-pattern') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-usage-pattern') `
+            -DataDirectory (Join-Path $TestDrive 'usage-pattern-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+
+        $text = $output | Out-String
+        $text | Should -Match 'fd'
+        $text | Should -Not -Match '(?m)^pattern \('
+    }
+
+    It 'shows a cheat sheet for a hidden command on exact search without advancing LastPeekAt' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-hidden-exact'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\fd')).LastWriteTime = [datetime]'2025-08-19T00:00:00'
+
+        $data = Join-Path $TestDrive 'hidden-exact-data'
+        $seeded = '2025-08-10T00:00:00.0000000Z'
+        $state = Get-CmdPeekState -DataDirectory $data
+        $state.LastPeekAt = $seeded
+        $state = Set-CmdPeekHidden -State $state -Command 'fd' -Hidden $true
+        Save-CmdPeekState -State $state -DataDirectory $data
+
+        $output = Invoke-CmdPeek -Search fd -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-hidden-exact') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-hidden-exact') `
+            -DataDirectory $data `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+
+        $text = $output | Out-String
+        $text | Should -Match 'fd \(scoop\)'
+        $text | Should -Not -Match 'Last \d+ installed commands'
+        $text | Should -Not -Match '(?m)^\d+\. fd'
+
+        $after = Get-CmdPeekState -DataDirectory $data
+        $after.LastPeekAt | Should -Be $seeded
+    }
 }
 
 Describe 'usage-examples.json' {

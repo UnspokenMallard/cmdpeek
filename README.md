@@ -79,7 +79,8 @@ cmdpeek detects `choco`, `scoop`, and `winget`. If none are on PATH it prints bo
 | `cmdpeek` or `cmdpeek -i` | Arrow-key TUI (list + live preview) |
 | `cmdpeek 5` or `cmdpeek -n 5` | Quick view: installs **since last look** (default), up to N with 1–3 examples; if none, falls back to newest N with header `No new installs since …` |
 | `cmdpeek -Since 7d` | Time window for quick view / MCP: `last` (default), `all`, ISO datetime, `24h`, or `7d` (minutes not supported) |
-| `cmdpeek -Search rg` | Quick filter by name |
+| `cmdpeek -Search rg` | Unique exact name: cheat sheet (usages + missing related). Otherwise search. |
+| `cmdpeek fd` | Unique command name: cheat sheet (usages + missing related). Otherwise search. |
 | `cmdpeek -Category media` | Filter by catalog category |
 | `cmdpeek -Json` | Full inventory JSON (for MCP / scripts) |
 | `cmdpeek -Gaps` | JSON gaps: missing related tools, thin docs, and **not-on-path** shims |
