@@ -22,7 +22,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget') `
             -DataDirectory $data `
-            -ExamplesPath $examples
+            -ExamplesPath $examples `
+            -HistoryPath @()
 
         $text = $output | Out-String
         $text | Should -Match 'fd'
@@ -53,7 +54,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-delta') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-delta') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
 
         $text = $output | Out-String
         $text | Should -Match 'Installed since last look:'
@@ -86,7 +88,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-fallback') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-fallback') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
 
         $text = $output | Out-String
         $text | Should -Match 'No new installs since'
@@ -112,7 +115,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-json-c') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-json-c') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') |
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @() |
             Out-String
 
         $snap = $raw | ConvertFrom-Json
@@ -147,7 +151,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-recent') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-recent') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') |
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @() |
             Out-String
 
         $payload = $raw | ConvertFrom-Json
@@ -174,7 +179,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-recent-cat') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-recent-cat') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') |
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @() |
             Out-String
 
         $payload = $raw | ConvertFrom-Json
@@ -196,7 +202,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-recent-empty') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-recent-empty') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') |
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @() |
             Out-String
 
         $payload = $raw | ConvertFrom-Json
@@ -248,7 +255,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-since-bad') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-since-bad') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
         } | Should -Throw -ExpectedMessage '*Invalid -Since*'
 
         $after = Get-CmdPeekState -DataDirectory $data
@@ -280,7 +288,8 @@ Describe 'Invoke-CmdPeek' {
             -WinGetRoot (Join-Path $TestDrive 'none-winget-shim') `
             -DataDirectory (Join-Path $TestDrive 'shim-probe-data') `
             -ExamplesPath $emptyExamples `
-            -HelpRunner $runner
+            -HelpRunner $runner `
+            -HistoryPath @()
 
         $calls | Should -Contain 'ffmpeg'
         $calls | Should -Not -Contain 'ffprobe'
@@ -308,7 +317,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-hide') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-hide') `
             -DataDirectory $data `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
 
         $text = $output | Out-String
         $text | Should -Match 'jq'
@@ -342,7 +352,8 @@ Describe 'Invoke-CmdPeek' {
             -WinGetRoot (Join-Path $TestDrive 'none-winget-lazy') `
             -DataDirectory (Join-Path $TestDrive 'lazy-data') `
             -ExamplesPath $emptyExamples `
-            -HelpRunner $runner
+            -HelpRunner $runner `
+            -HistoryPath @()
 
         $calls | Should -Contain 'alpha-cli'
         $calls | Should -Not -Contain 'beta-cli'
@@ -361,7 +372,8 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget') `
             -DataDirectory (Join-Path $TestDrive 'json-data') `
-            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') |
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @() |
             Out-String
 
         $snap = $raw | ConvertFrom-Json
@@ -397,6 +409,7 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget') `
             -DataDirectory $data `
+            -HistoryPath @() `
             -WarningVariable warnings `
             -WarningAction Continue | Out-String
 
@@ -434,6 +447,7 @@ Describe 'Invoke-CmdPeek' {
             -ChocolateyRoot (Join-Path $TestDrive 'none-choco-quick') `
             -WinGetRoot (Join-Path $TestDrive 'none-winget-quick') `
             -DataDirectory $data `
+            -HistoryPath @() `
             -WarningVariable warnings `
             -WarningAction Continue | Out-String
 

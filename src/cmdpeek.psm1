@@ -239,7 +239,19 @@ function Invoke-CmdPeek {
 
     if ($Json -or $Gaps) {
         $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
-        $snapshot = ConvertTo-CmdPeekSnapshot -History $history -Manager @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All) -Catalog $catalog -Favorite @($state.Favorites) -Hidden @($state.Hidden) -CommandTester $CommandTester
+        $snapArgs = @{
+            History        = $history
+            Manager        = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
+            Catalog        = $catalog
+            Favorite       = @($state.Favorites)
+            Hidden         = @($state.Hidden)
+            CommandTester  = $CommandTester
+            RecentLines    = $RecentLines
+        }
+        if ($PSBoundParameters.ContainsKey('HistoryPath')) {
+            $snapArgs.HistoryPath = $HistoryPath
+        }
+        $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
         if ($Gaps) {
             Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
         }

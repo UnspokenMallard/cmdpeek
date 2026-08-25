@@ -374,7 +374,9 @@ function Get-CmdPeekInventory {
         [string[]]$EnabledManagers,
         [scriptblock]$CommandTester,
         [string]$Search,
-        [string]$Category
+        [string]$Category,
+        [string[]]$HistoryPath,
+        [int]$RecentLines = 0
     )
 
     $managerNames = @()
@@ -410,7 +412,19 @@ function Get-CmdPeekInventory {
         $history = @(Search-CmdPeekCommand -History $history -Query $Search -Category $Category)
     }
 
-    $snapshot = ConvertTo-CmdPeekSnapshot -History $history -Manager @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All) -Catalog $catalog -Favorite @($state.Favorites) -Hidden @($state.Hidden) -CommandTester $CommandTester
+    $snapArgs = @{
+        History       = $history
+        Manager       = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
+        Catalog       = $catalog
+        Favorite      = @($state.Favorites)
+        Hidden        = @($state.Hidden)
+        CommandTester = $CommandTester
+        RecentLines   = $RecentLines
+    }
+    if ($PSBoundParameters.ContainsKey('HistoryPath')) {
+        $snapArgs.HistoryPath = $HistoryPath
+    }
+    $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
 
     return [pscustomobject]@{
         History  = $history
