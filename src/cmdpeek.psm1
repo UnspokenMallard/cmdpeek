@@ -247,7 +247,8 @@ function Invoke-CmdPeek {
     }
 
     if ($useInteractive) {
-        $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog)
+        $kits = Get-CmdPeekCatalogKits
+        $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
         Invoke-CmdPeekInteractive -History $history -State $state -DataDirectory $DataDirectory -Gap $gapList -Catalog $catalog -HelpRunner $HelpRunner
         return
     }

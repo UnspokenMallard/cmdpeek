@@ -203,6 +203,64 @@ function Get-CmdPeekGap {
     }
     foreach ($g in $kitArr) { $gaps.Add($g) }
 
+    $covered = @{}
+    foreach ($g in @($gaps.ToArray())) {
+        if (-not $g -or -not $g.command) { continue }
+        if ($g.kind -eq 'missing-related' -or $g.kind -eq 'kit') {
+            $covered[$g.command.ToLowerInvariant()] = $true
+        }
+    }
+
+    $byCatInstalled = @{}
+    $byCatMissing = @{}
+    foreach ($ck in @($Catalog.Keys)) {
+        $entry = $Catalog[$ck]
+        $cat = 'other'
+        if ($entry -and $entry.PSObject.Properties['category'] -and $entry.category) {
+            $cat = [string]$entry.category
+        }
+        if (-not $byCatInstalled.ContainsKey($cat)) {
+            $byCatInstalled[$cat] = New-Object System.Collections.Generic.List[string]
+            $byCatMissing[$cat] = New-Object System.Collections.Generic.List[string]
+        }
+        $lk = $ck.ToLowerInvariant()
+        if ($installed.ContainsKey($lk)) {
+            $byCatInstalled[$cat].Add([string]$installed[$lk].Command)
+        }
+        else {
+            $byCatMissing[$cat].Add([string]$ck)
+        }
+    }
+
+    $neighborList = New-Object System.Collections.Generic.List[object]
+    foreach ($cat in @($byCatInstalled.Keys)) {
+        $installedHere = @($byCatInstalled[$cat].ToArray())
+        if ($installedHere.Count -eq 0) { continue }
+        $relatedTo = @($installedHere | Sort-Object { $_.ToLowerInvariant() } | Select-Object -First 3)
+        $cands = @($byCatMissing[$cat].ToArray() | Sort-Object { $_.ToLowerInvariant() })
+        $kept = 0
+        foreach ($name in $cands) {
+            $lk = $name.ToLowerInvariant()
+            if ($covered.ContainsKey($lk)) { continue }
+            if ($kept -ge 3) { break }
+            $neighborList.Add([pscustomobject]@{
+                kind      = 'category-neighbor'
+                command   = $name
+                reason    = "Other tools in category '$cat' are installed"
+                relatedTo = @($relatedTo)
+                category  = $cat
+            })
+            $kept++
+            $covered[$lk] = $true
+        }
+    }
+
+    $neighborArr = @($neighborList.ToArray())
+    if ($neighborArr.Count -gt 1) {
+        $neighborArr = @($neighborArr | Sort-Object { $_.command.ToLowerInvariant() })
+    }
+    foreach ($g in $neighborArr) { $gaps.Add($g) }
+
     return @($gaps.ToArray())
 }
 
@@ -216,7 +274,8 @@ function ConvertTo-CmdPeekSnapshot {
         [hashtable]$Catalog,
         [string[]]$Favorite,
         [string[]]$Hidden,
-        [scriptblock]$CommandTester
+        [scriptblock]$CommandTester,
+        [hashtable]$Kits
     )
 
     if (-not $Catalog) { $Catalog = @{} }
@@ -229,7 +288,12 @@ function ConvertTo-CmdPeekSnapshot {
             $row
         }
     )
-    $gaps = @(Get-CmdPeekGap -History $history -Catalog $Catalog)
+    $kitMap = $Kits
+    if (-not $PSBoundParameters.ContainsKey('Kits')) {
+        $kitMap = Get-CmdPeekCatalogKits
+    }
+    if (-not $kitMap) { $kitMap = @{} }
+    $gaps = @(Get-CmdPeekGap -History $history -Catalog $Catalog -Kits $kitMap)
 
     $commands = @(
         foreach ($row in @($history)) {

@@ -213,6 +213,50 @@ Describe 'Get-CmdPeekGap' {
         $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog)
         @($gaps | Where-Object { $_.kind -eq 'kit' }).Count | Should -Be 0
     }
+
+    It 'suggests at most three category neighbors and skips missing-related and kit names' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @('rg')
+            }
+        )
+        $catalog = @{
+            'fd'   = [pscustomobject]@{ category = 'dev-tools'; related = @('rg'); usages = @('fd x') }
+            'rg'   = [pscustomobject]@{ category = 'dev-tools'; related = @('fd'); usages = @('rg x') }
+            'fzf'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fzf') }
+            'bat'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('bat') }
+            'eza'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('eza') }
+            'delta'= [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('delta') }
+            'jq'   = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('jq') }
+        }
+        $kits = @{ 'dev-tools' = @('fd', 'fzf') }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
+        @($gaps | Where-Object { $_.kind -eq 'missing-related' }).command | Should -Contain 'rg'
+        @($gaps | Where-Object { $_.kind -eq 'kit' }).command | Should -Contain 'fzf'
+        $neighbors = @($gaps | Where-Object { $_.kind -eq 'category-neighbor' })
+        $neighbors.Count | Should -Be 3
+        $neighbors.command | Should -Not -Contain 'rg'
+        $neighbors.command | Should -Not -Contain 'fzf'
+        $neighbors.command | Should -Not -Contain 'fd'
+        @($neighbors)[0].command | Should -Be 'bat'
+        @(@($neighbors)[0].relatedTo) | Should -Contain 'fd'
+    }
+
+    It 'does not suggest category neighbors when nothing in that category is installed' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'jq'; PackageName = 'jq'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('jq .'); Related = @()
+            }
+        )
+        $catalog = @{
+            'ffmpeg' = [pscustomobject]@{ category = 'media'; related = @(); usages = @('ffmpeg') }
+            'mpv'    = [pscustomobject]@{ category = 'media'; related = @(); usages = @('mpv') }
+        }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits @{})
+        @($gaps | Where-Object { $_.kind -eq 'category-neighbor' }).Count | Should -Be 0
+    }
 }
 
 Describe 'ConvertTo-CmdPeekSnapshot' {
@@ -235,7 +279,7 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
             'fd' = [pscustomobject]@{ category = 'dev-tools'; related = @('rg'); usages = @('fd <pattern>') }
             'rg' = [pscustomobject]@{ category = 'dev-tools'; related = @('fd'); usages = @('rg <pattern>') }
         }
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager $managers -Catalog $catalog -Favorite @('fd')
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager $managers -Catalog $catalog -Favorite @('fd') -Kits @{}
         $snap.commands.Count | Should -Be 1
         @($snap.commands)[0].command | Should -Be 'fd'
         $snap.favorites | Should -Contain 'fd'
@@ -256,7 +300,7 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
                 Related        = @()
             }
         )
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $false }
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $false } -Kits @{}
         @($snap.commands)[0].onPath | Should -BeFalse
         $snap.gaps.kind | Should -Contain 'not-on-path'
     }
@@ -272,8 +316,23 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
                 Related        = @()
             }
         )
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $true }
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{}
         @($snap.commands)[0].onPath | Should -BeTrue
         @($snap.gaps | Where-Object { $_.kind -eq 'not-on-path' }).Count | Should -Be 0
+    }
+
+    It 'loads shipped kits when -Kits is omitted' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @()
+            }
+        )
+        $catalog = @{
+            'fd'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fd x') }
+            'fzf' = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fzf') }
+        }
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog $catalog -Favorite @() -Hidden @() -CommandTester { $true }
+        @($snap.gaps | Where-Object { $_.kind -eq 'kit' -and $_.command -eq 'fzf' }).Count | Should -BeGreaterThan 0
     }
 }
