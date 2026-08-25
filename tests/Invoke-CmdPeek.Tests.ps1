@@ -655,6 +655,97 @@ Describe 'Invoke-CmdPeek' {
         $after = Get-CmdPeekState -DataDirectory $data
         $after.LastPeekAt | Should -Be $seeded
     }
+
+    It 'prepends rusty tools when just-installed delta is empty' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-rusty-n'
+        $fdApp = Join-Path $scoopRoot 'apps\fd\current'
+        $jqApp = Join-Path $scoopRoot 'apps\jq\current'
+        New-Item -ItemType Directory -Force -Path $fdApp, $jqApp | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $fdApp 'manifest.json') -Encoding UTF8
+        '{"version":"1.7.1","bin":"jq.exe"}' | Set-Content -Path (Join-Path $jqApp 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\fd')).LastWriteTime = [datetime]'2025-08-22T00:00:00'
+        (Get-Item (Join-Path $scoopRoot 'apps\jq')).LastWriteTime = [datetime]'2025-08-19T00:00:00'
+
+        $hist = Join-Path $TestDrive 'hist-rusty-n.txt'
+        @(
+            'jq .'
+            'unrelated'
+            'fd pattern'
+        ) | Set-Content -LiteralPath $hist -Encoding UTF8
+
+        $data = Join-Path $TestDrive 'rusty-n-data'
+        $state = Get-CmdPeekState -DataDirectory $data
+        $state.LastPeekAt = ([datetime]'2025-08-23T00:00:00').ToString('o')
+        Save-CmdPeekState -State $state -DataDirectory $data
+        $before = $state.LastPeekAt
+
+        $output = Invoke-CmdPeek -Count 5 -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-rn') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-rn') `
+            -DataDirectory $data `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @($hist) `
+            -RecentLines 2
+
+        $text = $output | Out-String
+        $text | Should -Match 'Rusty tools \(not in recent history\):'
+        $text | Should -Match 'jq \(scoop\)'
+        $text | Should -Match 'last: jq \.'
+        $text | Should -Match 'No new installs since'
+        $after = Get-CmdPeekState -DataDirectory $data
+        $after.LastPeekAt | Should -Not -Be $before
+    }
+
+    It 'lists hidden never-used commands on -Rusty but not on -n rusty block' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-rusty-hide'
+        $fdApp = Join-Path $scoopRoot 'apps\fd\current'
+        $hidApp = Join-Path $scoopRoot 'apps\hiddencli\current'
+        New-Item -ItemType Directory -Force -Path $fdApp, $hidApp | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $fdApp 'manifest.json') -Encoding UTF8
+        '{"version":"1.0.0","bin":"hiddencli.exe"}' | Set-Content -Path (Join-Path $hidApp 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\fd')).LastWriteTime = [datetime]'2025-08-22T00:00:00'
+        (Get-Item (Join-Path $scoopRoot 'apps\hiddencli')).LastWriteTime = [datetime]'2025-08-19T00:00:00'
+
+        $hist = Join-Path $TestDrive 'hist-hide.txt'
+        @(
+            'unrelated'
+            'fd pattern'
+        ) | Set-Content -LiteralPath $hist -Encoding UTF8
+
+        $data = Join-Path $TestDrive 'rusty-hide-data'
+        $st = Get-CmdPeekState -DataDirectory $data
+        $st.LastPeekAt = ([datetime]'2025-08-23T00:00:00').ToString('o')
+        $st.Hidden = @('hiddencli')
+        Save-CmdPeekState -State $st -DataDirectory $data
+
+        $nText = @(Invoke-CmdPeek -Count 5 -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-rh') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-rh') `
+            -DataDirectory $data `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @($hist) `
+            -RecentLines 2) | Out-String
+        $nText | Should -Not -Match 'hiddencli'
+        $afterN = Get-CmdPeekState -DataDirectory $data
+
+        $rText = @(Invoke-CmdPeek -Rusty -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-rh2') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-rh2') `
+            -DataDirectory $data `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @($hist) `
+            -RecentLines 2) | Out-String
+        $rText | Should -Match 'hiddencli'
+        $rText | Should -Not -Match 'No new installs since'
+        $after = Get-CmdPeekState -DataDirectory $data
+        $after.LastPeekAt | Should -Be $afterN.LastPeekAt
+    }
 }
 
 Describe 'usage-examples.json' {

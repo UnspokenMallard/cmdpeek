@@ -37,6 +37,9 @@ function Invoke-CmdPeek {
         [switch]$Gaps,
         [string]$Since,
         [switch]$Recent,
+        [switch]$Rusty,
+        [string[]]$HistoryPath,
+        [int]$RecentLines = 0,
         [string]$Hide,
         [string]$Unhide,
         [string]$Star,
@@ -50,14 +53,18 @@ function Invoke-CmdPeek {
     if ($Json -or $Gaps) {
         $NonInteractive = $true
     }
+    if ($Rusty -and -not $Interactive) {
+        $NonInteractive = $true
+    }
 
     $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
     if ($NonInteractive) { $useInteractive = $false }
+    if ($Rusty -and -not $Interactive) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
     $isRecencyPath = [bool]$Recent -or (
-        -not $useInteractive -and -not $Json -and -not $Gaps -and (
+        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and (
             $Count -gt 0 -or (-not $Search -and -not $Category)
         )
     )
@@ -247,6 +254,36 @@ function Invoke-CmdPeek {
         return
     }
 
+    if ($Rusty -and -not $Json -and -not $Gaps -and -not $useInteractive -and -not $Search) {
+        $hp = $HistoryPath
+        $hpBound = $PSBoundParameters.ContainsKey('HistoryPath')
+        if (-not $hpBound) {
+            $existing = @(Get-CmdPeekPsReadLineHistoryPath)
+            if ($existing.Count -eq 0) {
+                Write-Output "No PSReadLine history found."
+                return
+            }
+            $hp = $existing
+        }
+        else {
+            $any = $false
+            foreach ($p in @($hp)) {
+                if ($p -and (Test-Path -LiteralPath $p)) { $any = $true; break }
+            }
+            if (-not $any) {
+                Write-Output "No PSReadLine history found."
+                return
+            }
+        }
+        $rustyRows = @(Get-CmdPeekRusty -History $history -HistoryPath @($hp) -RecentLines $RecentLines)
+        if ($rustyRows.Count -eq 0) {
+            Write-Output (Format-CmdPeekQuickOutput -History @() -ExampleCount 3 -Rusty)
+            return
+        }
+        Write-Output (Format-CmdPeekQuickOutput -History $rustyRows -ExampleCount 3 -Rusty)
+        return
+    }
+
     if ($useInteractive) {
         $kits = Get-CmdPeekCatalogKits
         $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
@@ -299,6 +336,7 @@ function Invoke-CmdPeek {
     $parsed = Convert-CmdPeekSince -Since $sinceSpec -Cursor $state.LastPeekAt
     $slice = @()
     $header = ''
+    $emptyDelta = $false
     if ($parsed.Kind -eq 'all') {
         $slice = @(Select-CmdPeekJustInstalled -History $history -Since 'all' -Count $take -CommandTester $CommandTester)
         $header = "Last $($slice.Count) installed commands:"
@@ -309,6 +347,7 @@ function Invoke-CmdPeek {
             $slice = @(Select-CmdPeekJustInstalled -History $history -Since 'all' -Count $take -CommandTester $CommandTester)
             $when = $(if ($state.LastPeekAt) { $state.LastPeekAt } else { 'never' })
             $header = "No new installs since $when. Showing last $($slice.Count) instead."
+            $emptyDelta = $true
         }
         else {
             $header = 'Installed since last look:'
@@ -328,7 +367,42 @@ function Invoke-CmdPeek {
         return
     }
 
+    $rustyOut = $null
+    if ($emptyDelta) {
+        $skipRusty = $false
+        $rustyArgs = @{
+            History     = @(
+                $history | Where-Object {
+                    -not ($_.PSObject.Properties['Hidden'] -and $_.Hidden)
+                }
+            )
+            RecentLines = $RecentLines
+        }
+        if ($PSBoundParameters.ContainsKey('HistoryPath')) {
+            $anyHist = $false
+            foreach ($p in @($HistoryPath)) {
+                if ($p -and (Test-Path -LiteralPath $p)) { $anyHist = $true; break }
+            }
+            if (-not $anyHist) {
+                $skipRusty = $true
+            }
+            else {
+                $rustyArgs.HistoryPath = @($HistoryPath)
+            }
+        }
+        if (-not $skipRusty) {
+            $rustyRows = @(Get-CmdPeekRusty @rustyArgs)
+            $top = @($rustyRows | Select-Object -First 3)
+            if ($top.Count -gt 0) {
+                $rustyOut = Format-CmdPeekQuickOutput -History $top -ExampleCount 3 -Rusty
+            }
+        }
+    }
+
     $slice = @(Add-CmdPeekUsageProbe -History $slice -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+    if ($rustyOut) {
+        Write-Output $rustyOut
+    }
     Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 3 -Header $header)
     $state.LastPeekAt = (Get-Date).ToString('o')
     Save-CmdPeekState -State $state -DataDirectory $DataDirectory

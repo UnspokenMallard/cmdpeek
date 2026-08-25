@@ -43,6 +43,8 @@ param(
 
     [switch]$Recent,
 
+    [switch]$Rusty,
+
     [string]$Hide,
 
     [string]$Unhide,
@@ -73,6 +75,7 @@ Usage:
   cmdpeek -Json               Full inventory JSON (MCP / scripts)
   cmdpeek -Json -Recent       MCP recency envelope (since, mode, shims, onPath)
   cmdpeek -Gaps               JSON gaps: missing related, thin docs, not-on-path, shadowing, kits, category-neighbor
+  cmdpeek -Rusty              Installed tools missing from recent PSReadLine history
   cmdpeek -Hide LogExpert     Hide a command from cmdpeek -n
   cmdpeek -Star fd            Favorite a command
 
@@ -116,6 +119,7 @@ if ($Json) { $invoke.Json = $true }
 if ($Gaps) { $invoke.Gaps = $true }
 if ($Since) { $invoke.Since = $Since }
 if ($Recent) { $invoke.Recent = $true }
+if ($Rusty) { $invoke.Rusty = $true }
 if ($Hide) { $invoke.Hide = $Hide }
 if ($Unhide) { $invoke.Unhide = $Unhide }
 if ($Star) { $invoke.Star = $Star }
