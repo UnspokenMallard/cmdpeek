@@ -101,6 +101,48 @@ function Get-CmdPeekGap {
         })
     }
 
+    $byName = @{}
+    foreach ($row in @($History)) {
+        if (-not $row -or -not $row.Command) { continue }
+        $key = $row.Command.ToLowerInvariant()
+        if (-not $byName.ContainsKey($key)) {
+            $byName[$key] = New-Object System.Collections.Generic.List[object]
+        }
+        $byName[$key].Add($row)
+    }
+
+    $shadowNames = [string[]]@($byName.Keys)
+    if ($shadowNames.Count -gt 1) {
+        [Array]::Sort($shadowNames, [StringComparer]::OrdinalIgnoreCase)
+    }
+    foreach ($key in $shadowNames) {
+        $rows = @($byName[$key].ToArray())
+        $managers = New-Object System.Collections.Generic.List[string]
+        foreach ($row in $rows) {
+            $pm = ''
+            if ($row.PSObject.Properties['PackageManager'] -and $row.PackageManager) {
+                $pm = [string]$row.PackageManager.ToLowerInvariant()
+            }
+            if ($pm -and $managers -notcontains $pm) { $managers.Add($pm) }
+        }
+        if ($managers.Count -lt 2) { continue }
+        $sortedPm = [string[]]@($managers)
+        [Array]::Sort($sortedPm, [StringComparer]::OrdinalIgnoreCase)
+        $first = @($rows)[0]
+        $cat = 'other'
+        if ($first.PSObject.Properties['Category'] -and $first.Category) {
+            $cat = [string]$first.Category
+        }
+        $gaps.Add([pscustomobject]@{
+            kind            = 'shadowing'
+            command         = [string]$first.Command
+            reason          = 'Installed from more than one package manager'
+            relatedTo       = @()
+            category        = $cat
+            packageManagers = @($sortedPm)
+        })
+    }
+
     return @($gaps.ToArray())
 }
 
