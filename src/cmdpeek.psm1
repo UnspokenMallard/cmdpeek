@@ -6,6 +6,7 @@ $script:CmdPeekModuleRoot = $PSScriptRoot
 . (Join-Path $PSScriptRoot 'Config.ps1')
 . (Join-Path $PSScriptRoot 'PackageManager.ps1')
 . (Join-Path $PSScriptRoot 'CommandHistory.ps1')
+. (Join-Path $PSScriptRoot 'CommandUse.ps1')
 . (Join-Path $PSScriptRoot 'UsageExamples.ps1')
 . (Join-Path $PSScriptRoot 'InteractiveMode.ps1')
 . (Join-Path $PSScriptRoot 'Inventory.ps1')
@@ -361,4 +362,5 @@ Export-ModuleMember -Function @(
     'Add-CmdPeekProfileHint'
     'Convert-CmdPeekSince'
     'Select-CmdPeekJustInstalled'
+    'Get-CmdPeekRusty'
 )

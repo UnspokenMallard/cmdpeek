@@ -35,6 +35,7 @@
         'Add-CmdPeekProfileHint'
         'Convert-CmdPeekSince'
         'Select-CmdPeekJustInstalled'
+        'Get-CmdPeekRusty'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
