@@ -211,6 +211,45 @@ Describe 'Add-CmdPeekUsageProbe' {
     }
 }
 
+Describe 'Get-CmdPeekCatalogKits' {
+    It 'returns empty hashtable when the file is missing' {
+        $kits = Get-CmdPeekCatalogKits -Path (Join-Path $TestDrive 'no-such-kits.json')
+        $kits.Count | Should -Be 0
+    }
+
+    It 'returns empty hashtable when kits is absent' {
+        $path = Join-Path $TestDrive 'commands-only.json'
+        '{"commands":{"fd":{"category":"dev-tools","usages":["fd x"]}}}' | Set-Content -LiteralPath $path -Encoding UTF8
+        $kits = Get-CmdPeekCatalogKits -Path $path
+        $kits.Count | Should -Be 0
+        $catalog = Get-CmdPeekExampleCatalog -Path $path
+        $catalog.ContainsKey('fd') | Should -BeTrue
+    }
+
+    It 'returns empty hashtable for invalid JSON' {
+        $path = Join-Path $TestDrive 'bad.json'
+        '{' | Set-Content -LiteralPath $path -Encoding UTF8
+        (Get-CmdPeekCatalogKits -Path $path).Count | Should -Be 0
+    }
+
+    It 'loads kits and keeps a one-element member list as an array' {
+        $path = Join-Path $TestDrive 'kits.json'
+        @'
+{
+  "kits": {
+    "solo": ["fd"],
+    "media": ["ffmpeg", "yt-dlp"]
+  }
+}
+'@ | Set-Content -LiteralPath $path -Encoding UTF8
+        $kits = Get-CmdPeekCatalogKits -Path $path
+        @($kits['solo']).Count | Should -Be 1
+        @($kits['solo'])[0] | Should -Be 'fd'
+        @($kits['media']).Count | Should -Be 2
+        @($kits['media']) | Should -Contain 'ffmpeg'
+    }
+}
+
 Describe 'Get-CmdPeekCachedHelpText TTL' {
     It 'expires cache using CacheTtlHours from state.json' {
         $data = Join-Path $TestDrive 'ttl-short'

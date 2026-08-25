@@ -665,4 +665,13 @@ Describe 'usage-examples.json' {
         $json.commands.fd.usages[0] | Should -Match 'fd'
         $json.commands.jq.usages[0] | Should -Match 'jq'
     }
+
+    It 'declares role kits next to commands' {
+        $path = Join-Path $PSScriptRoot '..\examples\usage-examples.json'
+        $json = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        @($json.kits.media) | Should -Contain 'ffmpeg'
+        @($json.kits.'dev-tools') | Should -Contain 'fd'
+        @($json.kits.search) | Should -Contain 'rg'
+        $json.commands.mpv.category | Should -Be 'media'
+    }
 }

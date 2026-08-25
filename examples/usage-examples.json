@@ -19,6 +19,14 @@
         "ffmpeg -i in.mp4 -vf scale=1280:-1 out.mp4  # Resize video"
       ]
     },
+    "mpv": {
+      "category": "media",
+      "related": ["ffmpeg", "yt-dlp"],
+      "usages": [
+        "mpv <file>                      # Play media",
+        "mpv --no-video <file>           # Audio only"
+      ]
+    },
     "fd": {
       "category": "dev-tools",
       "related": ["rg", "fzf"],
@@ -288,5 +296,10 @@
         "choco upgrade all               # Upgrade all"
       ]
     }
+  },
+  "kits": {
+    "media": ["ffmpeg", "yt-dlp", "mpv"],
+    "dev-tools": ["fd", "rg", "fzf"],
+    "search": ["rg", "fd", "fzf"]
   }
 }

@@ -349,6 +349,7 @@ Export-ModuleMember -Function @(
     'Import-CmdPeekState'
     'Get-CmdPeekUsageExample'
     'Get-CmdPeekExampleCatalog'
+    'Get-CmdPeekCatalogKits'
     'Invoke-CmdPeek'
     'Invoke-CmdPeekInteractive'
     'Format-CmdPeekQuickOutput'

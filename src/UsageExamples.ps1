@@ -51,6 +51,42 @@ function Get-CmdPeekExampleCatalog {
     return $map
 }
 
+function Get-CmdPeekCatalogKits {
+    [CmdletBinding()]
+    param(
+        [string]$Path
+    )
+
+    $kits = @{}
+    $resolved = Get-CmdPeekExampleCatalogPath -Path $Path
+    if (-not $resolved -or -not (Test-Path -LiteralPath $resolved)) {
+        return $kits
+    }
+
+    try {
+        $json = Get-Content -LiteralPath $resolved -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        return $kits
+    }
+
+    if (-not $json -or -not $json.PSObject.Properties['kits']) {
+        return $kits
+    }
+
+    foreach ($prop in $json.kits.PSObject.Properties) {
+        $members = New-Object System.Collections.Generic.List[string]
+        foreach ($item in @($prop.Value)) {
+            if ($item -is [string] -and $item) {
+                $members.Add($item)
+            }
+        }
+        $kits[$prop.Name] = @($members)
+    }
+
+    return $kits
+}
+
 function Get-CmdPeekCatalogEntry {
     param(
         [string]$Command,
