@@ -20,11 +20,15 @@ function Format-CmdPeekQuickOutput {
         [object[]]$History,
         [int]$ExampleCount = 3,
         [string]$Header,
-        [switch]$CheatSheet
+        [switch]$CheatSheet,
+        [switch]$Rusty
     )
 
     $items = @($History)
     if ($items.Count -eq 0) {
+        if ($Rusty) {
+            return "No rusty tools.`n"
+        }
         return "No installed commands found.`nInstall packages with scoop, choco, or winget, then run cmdpeek again."
     }
 
@@ -56,6 +60,9 @@ function Format-CmdPeekQuickOutput {
         if ($Header) {
             $lines.Add($Header)
         }
+        elseif ($Rusty) {
+            $lines.Add('Rusty tools (not in recent history):')
+        }
         else {
             $lines.Add("Last $($items.Count) installed commands:")
         }
@@ -65,7 +72,7 @@ function Format-CmdPeekQuickOutput {
     $index = 1
     foreach ($entry in @($display)) {
         $row = $entry.Row
-        if ($CheatSheet) {
+        if ($CheatSheet -or $Rusty) {
             $title = '{0} ({1})' -f $row.Command, $row.PackageManager
         }
         else {
@@ -75,11 +82,15 @@ function Format-CmdPeekQuickOutput {
             $title += '  not on PATH'
         }
         $lines.Add($title)
+        $last = ''
+        if ($row.PSObject.Properties['LastLine'] -and $row.LastLine) { $last = [string]$row.LastLine }
+        elseif ($row.PSObject.Properties['lastLine'] -and $row.lastLine) { $last = [string]$row.lastLine }
+        if ($Rusty -and $last) { $lines.Add(('   last: {0}' -f $last)) }
         $aligned = @(Format-CmdPeekAlignedUsage -Usage $entry.Usages -Count $ExampleCount -CommentColumn $commentColumn)
         foreach ($usage in $aligned) {
             $lines.Add(('   -  {0}' -f $usage))
         }
-        if (-not $CheatSheet -and $row.PSObject.Properties['Shims'] -and $row.Shims -and @($row.Shims).Count -gt 0) {
+        if (-not $CheatSheet -and -not $Rusty -and $row.PSObject.Properties['Shims'] -and $row.Shims -and @($row.Shims).Count -gt 0) {
             $lines.Add(('   also: {0}' -f ((@($row.Shims) -join ', '))))
         }
         if ($CheatSheet) {
@@ -91,7 +102,7 @@ function Format-CmdPeekQuickOutput {
                 $lines.Add(('   gaps: {0}' -f ($missing -join ', ')))
             }
         }
-        elseif ($row.PSObject.Properties['Related'] -and $row.Related -and @($row.Related).Count -gt 0) {
+        elseif (-not $Rusty -and $row.PSObject.Properties['Related'] -and $row.Related -and @($row.Related).Count -gt 0) {
             $lines.Add(('   suggestions: {0}' -f ((@($row.Related) | Select-Object -First 3) -join ', ')))
         }
         $lines.Add('')

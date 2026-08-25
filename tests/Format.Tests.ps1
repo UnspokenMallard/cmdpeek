@@ -104,4 +104,24 @@ Describe 'Format-CmdPeekQuickOutput' {
         $text | Should -Match 'gaps: rg, fzf'
         $text | Should -Match 'Find files'
     }
+
+    It 'prints rusty titles without indexes and includes last history line' {
+        $rows = @(
+            [pscustomobject]@{
+                Command        = 'jq'
+                PackageManager = 'scoop'
+                kind           = 'stale'
+                LastLine       = 'jq .'
+                Usages         = @('jq . # json')
+            }
+        )
+        $text = Format-CmdPeekQuickOutput -History $rows -ExampleCount 3 -Rusty
+        $text | Should -Match 'Rusty tools \(not in recent history\):'
+        $text | Should -Match '(?m)^jq \(scoop\)'
+        $text | Should -Not -Match '^\d+\. jq'
+        $text | Should -Match 'last: jq \.'
+        $text | Should -Match 'json'
+        $text | Should -Not -Match 'suggestions:'
+        $text | Should -Not -Match 'gaps:'
+    }
 }
