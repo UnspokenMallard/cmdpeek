@@ -77,13 +77,14 @@ cmdpeek detects `choco`, `scoop`, and `winget`. If none are on PATH it prints bo
 | Command | Mode |
 | --- | --- |
 | `cmdpeek` or `cmdpeek -i` | Arrow-key TUI (list + live preview) |
-| `cmdpeek 5` or `cmdpeek -n 5` | Quick view: installs **since last look** (default), up to N with 1–3 examples; if none, falls back to newest N with header `No new installs since …` |
+| `cmdpeek 5` or `cmdpeek -n 5` | Quick view: installs **since last look** (default), up to N with 1–3 examples; if none, falls back to newest N with header `No new installs since …`; when there are no new installs, a short rusty block (up to 3 tools) may appear above that fallback |
 | `cmdpeek -Since 7d` | Time window for quick view / MCP: `last` (default), `all`, ISO datetime, `24h`, or `7d` (minutes not supported) |
 | `cmdpeek -Search rg` | Unique exact name: cheat sheet (usages + missing related). Otherwise search. |
 | `cmdpeek fd` | Unique command name: cheat sheet (usages + missing related). Otherwise search. |
 | `cmdpeek -Category media` | Filter by catalog category |
 | `cmdpeek -Json` | Full inventory JSON (for MCP / scripts) |
 | `cmdpeek -Gaps` | JSON gaps: missing related, thin docs, not-on-path, **shadowing**, incomplete **kits**, and **category-neighbor** |
+| `cmdpeek -Rusty` | Installed tools missing from recent PSReadLine history (never / not in last 500 lines) |
 | `cmdpeek -Export backup.json` | Backup favorites, hidden commands, and history |
 | `cmdpeek -Import backup.json` | Restore |
 | `cmdpeek -Reinstall fd -Manager scoop` | Reinstall a tracked package |
@@ -158,6 +159,7 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | `search_commands` | Find a CLI by name, category, or usage text |
 | `get_command` | Full detail + related missing tools |
 | `list_gaps` | Missing related, thin docs, not-on-path, shadowing, kit, and category-neighbor; filter with `kind` (`missing-related`, `thin-docs`, `not-on-path`, `shadowing`, `kit`, `category-neighbor`, `all`) |
+| `list_rusty` | Installed CLIs absent from recent PSReadLine history (never used or not in last 500 lines); filter with `kind` (`never`, `stale`, `all`) — not a packaging gap |
 | `list_package_managers` | choco / scoop / winget detection |
 | `list_favorites` | User-starred commands |
 | `list_hidden` | Commands hidden from `-n` |

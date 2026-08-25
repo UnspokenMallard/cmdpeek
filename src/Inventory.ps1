@@ -275,7 +275,9 @@ function ConvertTo-CmdPeekSnapshot {
         [string[]]$Favorite,
         [string[]]$Hidden,
         [scriptblock]$CommandTester,
-        [hashtable]$Kits
+        [hashtable]$Kits,
+        [string[]]$HistoryPath,
+        [int]$RecentLines = 0
     )
 
     if (-not $Catalog) { $Catalog = @{} }
@@ -294,6 +296,26 @@ function ConvertTo-CmdPeekSnapshot {
     }
     if (-not $kitMap) { $kitMap = @{} }
     $gaps = @(Get-CmdPeekGap -History $history -Catalog $Catalog -Kits $kitMap)
+
+    $hpBound = $PSBoundParameters.ContainsKey('HistoryPath')
+    $rustySrc = @()
+    if ($hpBound) {
+        $rustySrc = @(Get-CmdPeekRusty -History $history -HistoryPath $HistoryPath -RecentLines $RecentLines)
+    }
+    else {
+        $rustySrc = @(Get-CmdPeekRusty -History $history -RecentLines $RecentLines)
+    }
+    $rusty = @(
+        foreach ($r in $rustySrc) {
+            if (-not $r) { continue }
+            [pscustomobject]@{
+                command        = [string]$r.Command
+                kind           = [string]$r.kind
+                lastLine       = [string]$r.LastLine
+                packageManager = [string]$r.PackageManager
+            }
+        }
+    )
 
     $commands = @(
         foreach ($row in @($history)) {
@@ -337,6 +359,7 @@ function ConvertTo-CmdPeekSnapshot {
         favorites   = @($Favorite | Where-Object { $_ })
         hidden      = @($Hidden | Where-Object { $_ })
         gaps        = $gaps
+        rusty       = $rusty
     }
 }
 

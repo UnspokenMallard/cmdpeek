@@ -34,6 +34,7 @@ type Snapshot = {
     packageName?: string;
     packageManager?: string;
   }>;
+  rusty?: Array<{ command: string; kind: string; lastLine?: string; packageManager?: string }>;
 };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -217,6 +218,22 @@ server.tool(
       gaps = gaps.filter((g) => normalize(g.kind) === kind);
     }
     return asText({ gaps });
+  },
+);
+
+server.tool(
+  "list_rusty",
+  "Installed CLIs that do not appear in recent PSReadLine history (never used, or not in the last 500 history lines). Use this to remind the user how to use idle tools. Not a packaging gap.",
+  {
+    kind: z.enum(["never", "stale", "all"]).optional().describe("Rusty kind to return (default all)"),
+  },
+  async ({ kind }) => {
+    const snap = await loadSnapshot();
+    let rusty = snap.rusty ?? [];
+    if (kind && kind !== "all") {
+      rusty = rusty.filter((r) => normalize(r.kind) === kind);
+    }
+    return asText({ rusty });
   },
 );
 

@@ -5,6 +5,7 @@ BeforeAll {
     $src = Join-Path $PSScriptRoot '..\src'
     . (Join-Path $src 'PackageManager.ps1')
     . (Join-Path $src 'CommandHistory.ps1')
+    . (Join-Path $src 'CommandUse.ps1')
     . (Join-Path $src 'UsageExamples.ps1')
     . (Join-Path $src 'Inventory.ps1')
 }
@@ -279,7 +280,7 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
             'fd' = [pscustomobject]@{ category = 'dev-tools'; related = @('rg'); usages = @('fd <pattern>') }
             'rg' = [pscustomobject]@{ category = 'dev-tools'; related = @('fd'); usages = @('rg <pattern>') }
         }
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager $managers -Catalog $catalog -Favorite @('fd') -Kits @{}
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager $managers -Catalog $catalog -Favorite @('fd') -Kits @{} -HistoryPath @()
         $snap.commands.Count | Should -Be 1
         @($snap.commands)[0].command | Should -Be 'fd'
         $snap.favorites | Should -Contain 'fd'
@@ -300,7 +301,7 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
                 Related        = @()
             }
         )
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $false } -Kits @{}
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $false } -Kits @{} -HistoryPath @()
         @($snap.commands)[0].onPath | Should -BeFalse
         $snap.gaps.kind | Should -Contain 'not-on-path'
     }
@@ -316,7 +317,7 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
                 Related        = @()
             }
         )
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{}
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{} -HistoryPath @()
         @($snap.commands)[0].onPath | Should -BeTrue
         @($snap.gaps | Where-Object { $_.kind -eq 'not-on-path' }).Count | Should -Be 0
     }
@@ -332,7 +333,32 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
             'fd'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fd x') }
             'fzf' = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fzf') }
         }
-        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog $catalog -Favorite @() -Hidden @() -CommandTester { $true }
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog $catalog -Favorite @() -Hidden @() -CommandTester { $true } -HistoryPath @()
         @($snap.gaps | Where-Object { $_.kind -eq 'kit' -and $_.command -eq 'fzf' }).Count | Should -BeGreaterThan 0
+    }
+
+    It 'includes rusty rows from injected history and omits usages' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'jq'; PackageName = 'jq'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('jq . # json'); Related = @()
+            }
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @()
+            }
+        )
+        $hist = Join-Path $TestDrive 'snap-hist.txt'
+        @(
+            'jq .'
+            'x'
+            'fd y'
+        ) | Set-Content -LiteralPath $hist -Encoding UTF8
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{} -HistoryPath @($hist) -RecentLines 2
+        $jq = @($snap.rusty | Where-Object { $_.command -eq 'jq' })[0]
+        $jq.kind | Should -Be 'stale'
+        $jq.lastLine | Should -Be 'jq .'
+        $jq.PSObject.Properties.Name | Should -Not -Contain 'usages'
+        @($snap.rusty | Where-Object { $_.command -eq 'fd' }).Count | Should -Be 0
     }
 }
