@@ -7,10 +7,12 @@ function Get-CmdPeekGap {
         [Parameter(Mandatory)]
         [AllowEmptyCollection()]
         [object[]]$History,
-        [hashtable]$Catalog
+        [hashtable]$Catalog,
+        [hashtable]$Kits
     )
 
     if (-not $Catalog) { $Catalog = @{} }
+    if (-not $Kits) { $Kits = @{} }
 
     $installed = @{}
     foreach ($row in @($History)) {
@@ -142,6 +144,64 @@ function Get-CmdPeekGap {
             packageManagers = @($sortedPm)
         })
     }
+
+    $missingRelatedNames = @{}
+    foreach ($g in @($gaps.ToArray())) {
+        if ($g -and $g.kind -eq 'missing-related' -and $g.command) {
+            $missingRelatedNames[$g.command.ToLowerInvariant()] = $true
+        }
+    }
+
+    $kitSeen = @{}
+    $kitGaps = New-Object System.Collections.Generic.List[object]
+    $kitIds = [string[]]@($Kits.Keys)
+    if ($kitIds.Count -gt 1) {
+        [Array]::Sort($kitIds, [StringComparer]::OrdinalIgnoreCase)
+    }
+    foreach ($kitId in $kitIds) {
+        $members = @($Kits[$kitId])
+        $anyInstalled = $false
+        foreach ($member in $members) {
+            if ($member -and $installed.ContainsKey(([string]$member).ToLowerInvariant())) {
+                $anyInstalled = $true
+                break
+            }
+        }
+        if (-not $anyInstalled) { continue }
+
+        foreach ($member in $members) {
+            if (-not $member) { continue }
+            $lk = ([string]$member).ToLowerInvariant()
+            if ($installed.ContainsKey($lk)) { continue }
+            if ($missingRelatedNames.ContainsKey($lk)) { continue }
+            if ($kitSeen.ContainsKey($lk)) { continue }
+            $kitSeen[$lk] = $true
+            $entry = Get-CmdPeekCatalogEntry -Command $member -Catalog $Catalog
+            $commandName = [string]$member
+            $cat = 'other'
+            if ($entry) {
+                foreach ($ck in @($Catalog.Keys)) {
+                    if ($ck.ToLowerInvariant() -eq $lk) { $commandName = [string]$ck; break }
+                }
+                if ($entry.PSObject.Properties['category'] -and $entry.category) {
+                    $cat = [string]$entry.category
+                }
+            }
+            $kitGaps.Add([pscustomobject]@{
+                kind      = 'kit'
+                command   = $commandName
+                reason    = "Incomplete kit '$kitId'"
+                relatedTo = @($kitId)
+                category  = $cat
+            })
+        }
+    }
+
+    $kitArr = @($kitGaps.ToArray())
+    if ($kitArr.Count -gt 1) {
+        $kitArr = @($kitArr | Sort-Object { $_.command.ToLowerInvariant() })
+    }
+    foreach ($g in $kitArr) { $gaps.Add($g) }
 
     return @($gaps.ToArray())
 }

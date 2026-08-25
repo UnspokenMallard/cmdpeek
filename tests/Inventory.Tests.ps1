@@ -128,6 +128,91 @@ Describe 'Get-CmdPeekGap' {
         $gaps = @(Get-CmdPeekGap -History $history -Catalog @{})
         @($gaps | Where-Object { $_.kind -eq 'shadowing' }).Count | Should -Be 1
     }
+
+    It 'emits a kit gap for a missing member when another member is installed' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @()
+            }
+        )
+        $catalog = @{
+            'fd'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fd x') }
+            'rg'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('rg x') }
+        }
+        $kits = @{ 'dev-tools' = @('fd', 'rg') }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
+        $kitGaps = @($gaps | Where-Object { $_.kind -eq 'kit' })
+        $kitGaps.Count | Should -Be 1
+        @($kitGaps)[0].command | Should -Be 'rg'
+        @(@($kitGaps)[0].relatedTo) | Should -Be @('dev-tools')
+        @($kitGaps)[0].reason | Should -Match 'dev-tools'
+    }
+
+    It 'skips a kit gap when the missing name is already missing-related' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @('rg')
+            }
+        )
+        $catalog = @{
+            'fd' = [pscustomobject]@{ category = 'dev-tools'; related = @('rg'); usages = @('fd x') }
+            'rg' = [pscustomobject]@{ category = 'dev-tools'; related = @('fd'); usages = @('rg x') }
+        }
+        $kits = @{ 'dev-tools' = @('fd', 'rg') }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
+        @($gaps | Where-Object { $_.kind -eq 'missing-related' }).command | Should -Contain 'rg'
+        @($gaps | Where-Object { $_.kind -eq 'kit' }).Count | Should -Be 0
+    }
+
+    It 'emits only one kit gap when a missing name sits in two kits' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @()
+            }
+        )
+        $catalog = @{
+            'fd'  = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fd x') }
+            'fzf' = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fzf') }
+        }
+        $kits = @{
+            'search'    = @('fd', 'fzf')
+            'dev-tools' = @('fd', 'fzf')
+        }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
+        $kitGaps = @($gaps | Where-Object { $_.kind -eq 'kit' })
+        $kitGaps.Count | Should -Be 1
+        @(@($kitGaps)[0].relatedTo)[0] | Should -Be 'dev-tools'
+    }
+
+    It 'does not emit kit gaps when no member is installed' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'jq'; PackageName = 'jq'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('jq .'); Related = @()
+            }
+        )
+        $kits = @{ 'media' = @('ffmpeg', 'mpv') }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog @{} -Kits $kits)
+        @($gaps | Where-Object { $_.kind -eq 'kit' }).Count | Should -Be 0
+    }
+
+    It 'does not emit kit gaps when -Kits is omitted' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'fd'; PackageName = 'fd'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('fd x'); Related = @()
+            }
+        )
+        $catalog = @{
+            'fd' = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('fd x') }
+            'rg' = [pscustomobject]@{ category = 'dev-tools'; related = @(); usages = @('rg x') }
+        }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog)
+        @($gaps | Where-Object { $_.kind -eq 'kit' }).Count | Should -Be 0
+    }
 }
 
 Describe 'ConvertTo-CmdPeekSnapshot' {
