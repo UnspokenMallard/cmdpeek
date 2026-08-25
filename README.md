@@ -83,7 +83,7 @@ cmdpeek detects `choco`, `scoop`, and `winget`. If none are on PATH it prints bo
 | `cmdpeek fd` | Unique command name: cheat sheet (usages + missing related). Otherwise search. |
 | `cmdpeek -Category media` | Filter by catalog category |
 | `cmdpeek -Json` | Full inventory JSON (for MCP / scripts) |
-| `cmdpeek -Gaps` | JSON gaps: missing related tools, thin docs, and **not-on-path** shims |
+| `cmdpeek -Gaps` | JSON gaps: missing related, thin docs, not-on-path, **shadowing**, incomplete **kits**, and **category-neighbor** |
 | `cmdpeek -Export backup.json` | Backup favorites, hidden commands, and history |
 | `cmdpeek -Import backup.json` | Restore |
 | `cmdpeek -Reinstall fd -Manager scoop` | Reinstall a tracked package |
@@ -157,7 +157,7 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | `list_recent_commands` | Recency envelope from `-Json -Recent`: optional `since` (`last`, `all`, ISO, `24h`, `7d`); `mode` is `delta` or `fallback`; each command includes `shims` and `onPath` |
 | `search_commands` | Find a CLI by name, category, or usage text |
 | `get_command` | Full detail + related missing tools |
-| `list_gaps` | Missing related CLIs, thin docs, and **not-on-path** commands; filter with `kind` (`missing-related`, `thin-docs`, `not-on-path`, `all`) |
+| `list_gaps` | Missing related, thin docs, not-on-path, shadowing, kit, and category-neighbor; filter with `kind` (`missing-related`, `thin-docs`, `not-on-path`, `shadowing`, `kit`, `category-neighbor`, `all`) |
 | `list_package_managers` | choco / scoop / winget detection |
 | `list_favorites` | User-starred commands |
 | `list_hidden` | Commands hidden from `-n` |

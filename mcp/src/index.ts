@@ -195,10 +195,18 @@ server.tool(
 
 server.tool(
   "list_gaps",
-  "Identify tooling gaps: related CLIs that are not installed, and installed commands that only have generic --help (no curated examples). Use this to suggest what to install or document next.",
+  "Identify tooling gaps: missing related CLIs, thin docs, not-on-path shims, the same name from more than one package manager, incomplete role kits, and same-category catalog tools. Use this to suggest what to install or document next.",
   {
     kind: z
-      .enum(["missing-related", "thin-docs", "not-on-path", "all"])
+      .enum([
+        "missing-related",
+        "thin-docs",
+        "not-on-path",
+        "shadowing",
+        "category-neighbor",
+        "kit",
+        "all",
+      ])
       .optional()
       .describe("Gap kind to return (default all)"),
   },

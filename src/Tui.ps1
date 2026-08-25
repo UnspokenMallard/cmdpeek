@@ -476,7 +476,7 @@ function Write-CmdPeekTuiFrame {
             foreach ($g in $slice) {
                 $idx = $start + $i
                 $mark = $(if ($idx -eq $State.Selected) { '>' } else { ' ' })
-                $kind = Get-CmdPeekPadded $g.Kind 16
+                $kind = Get-CmdPeekPadded $g.Kind 18
                 $cmd = Get-CmdPeekPadded ([string]$g.Command) 18
                 $why = [string]$g.Reason
                 $row = " $mark $kind $cmd $why"

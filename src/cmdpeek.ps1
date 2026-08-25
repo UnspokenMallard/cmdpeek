@@ -72,7 +72,7 @@ Usage:
   cmdpeek --reinstall fd  Reinstall a tracked package
   cmdpeek -Json               Full inventory JSON (MCP / scripts)
   cmdpeek -Json -Recent       MCP recency envelope (since, mode, shims, onPath)
-  cmdpeek -Gaps               JSON gaps: missing related, thin docs, not-on-path
+  cmdpeek -Gaps               JSON gaps: missing related, thin docs, not-on-path, shadowing, kits, category-neighbor
   cmdpeek -Hide LogExpert     Hide a command from cmdpeek -n
   cmdpeek -Star fd            Favorite a command
 

@@ -148,3 +148,18 @@ Describe 'Get-CmdPeekProbeWindow' {
         @(Get-CmdPeekProbeWindow -View @() -Selected 0 -Scroll 0 -PageSize 5).Count | Should -Be 0
     }
 }
+
+Describe 'Get-CmdPeekPadded' {
+    It 'keeps category-neighbor intact at width 18' {
+        Get-CmdPeekPadded 'category-neighbor' 18 | Should -Be 'category-neighbor '
+        Get-CmdPeekPadded 'category-neighbor' 16 | Should -Be 'category-neighbo'
+    }
+}
+
+Describe 'Write-CmdPeekTuiFrame gaps kind width' {
+    It 'pads gap kinds to 18 characters' {
+        $src = Join-Path $PSScriptRoot '..\src\Tui.ps1'
+        $text = Get-Content -LiteralPath $src -Raw -Encoding UTF8
+        $text | Should -Match 'Get-CmdPeekPadded \$g\.Kind 18'
+    }
+}
