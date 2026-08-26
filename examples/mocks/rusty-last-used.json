@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "note": "PSReadLine history has no dates. This overlay supplies last-used timestamps for rusty-tool reminders.",
+  "commands": {
+    "jq": {
+      "lastUsedAt": "2026-03-02T14:11:00Z",
+      "lastLine": "jq '.' notes.json"
+    },
+    "fd": {
+      "lastUsedAt": "2026-08-20T09:04:11Z",
+      "lastLine": "fd -e ps1 src"
+    },
+    "yt-dlp": {
+      "lastUsedAt": null,
+      "lastLine": null
+    }
+  }
+}

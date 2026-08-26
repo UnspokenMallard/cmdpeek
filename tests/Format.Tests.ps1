@@ -124,4 +124,19 @@ Describe 'Format-CmdPeekQuickOutput' {
         $text | Should -Not -Match 'suggestions:'
         $text | Should -Not -Match 'gaps:'
     }
+
+    It 'prints last used dates on rusty rows' {
+        $rows = @(
+            [pscustomobject]@{
+                Command        = 'jq'
+                PackageManager = 'scoop'
+                kind           = 'stale'
+                LastLine       = 'jq .'
+                LastUsedAt     = [datetime]'2026-03-02T14:11:00Z'
+                Usages         = @('jq . # json')
+            }
+        )
+        $text = Format-CmdPeekQuickOutput -History $rows -ExampleCount 3 -Rusty
+        $text | Should -Match 'last used: 2026-03-02'
+    }
 }

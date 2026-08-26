@@ -336,6 +336,7 @@ function ConvertTo-CmdPeekSnapshot {
                 command        = [string]$r.Command
                 kind           = [string]$r.kind
                 lastLine       = [string]$r.LastLine
+                lastUsedAt     = $(if ($r.PSObject.Properties['LastUsedAt'] -and $r.LastUsedAt) { ([datetime]$r.LastUsedAt).ToString('o') } else { $null })
                 packageManager = [string]$r.PackageManager
             }
         }
@@ -407,7 +408,9 @@ function Get-CmdPeekInventory {
         [string]$Search,
         [string]$Category,
         [string[]]$HistoryPath,
-        [int]$RecentLines = 0
+        [int]$RecentLines = 0,
+        [string]$AptStatusPath,
+        [string]$PacmanRoot
     )
 
     $managerNames = @()
@@ -428,6 +431,8 @@ function Get-CmdPeekInventory {
             -ChocolateyRoot $ChocolateyRoot `
             -ScoopRoot $ScoopRoot `
             -WinGetRoot $WinGetRoot `
+            -AptStatusPath $AptStatusPath `
+            -PacmanRoot $PacmanRoot `
             -EnabledManagers $managerNames `
             -CommandTester $CommandTester)
 

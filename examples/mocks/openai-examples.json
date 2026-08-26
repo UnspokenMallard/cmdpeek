@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "model": "mock-gpt-4o-mini",
+  "note": "Canned completions. cmdpeek does not call OpenAI. Point CMDPEEK_OPENAI_MOCK_PATH at this file.",
+  "commands": {
+    "mystery-cli": {
+      "usages": [
+        "mystery-cli status                 # Show worker status",
+        "mystery-cli run --dry              # Preview a job without writing",
+        "mystery-cli logs --follow          # Stream recent logs"
+      ]
+    },
+    "acme-internal": {
+      "usages": [
+        "acme-internal whoami               # Print the active tenant",
+        "acme-internal deploy --stage       # Ship to staging"
+      ]
+    }
+  }
+}

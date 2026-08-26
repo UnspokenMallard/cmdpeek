@@ -297,16 +297,33 @@ function brew {
     $existing = ''
     if (Test-Path -LiteralPath $ProfilePath) {
         $existing = Get-Content -LiteralPath $ProfilePath -Raw -Encoding UTF8
-        if ($existing -and $existing.Contains($marker)) {
+        if ($existing -and $existing.Contains($marker) -and $existing.Contains('function pipx')) {
             return
+        }
+        if ($existing -and $existing.Contains($marker) -and -not $existing.Contains('function pipx')) {
+            $start = $existing.IndexOf('# BEGIN cmdpeek hint')
+            $endMarker = '# END cmdpeek hint'
+            $end = $existing.IndexOf($endMarker)
+            if ($start -ge 0 -and $end -gt $start) {
+                $end = $end + $endMarker.Length
+                while ($end -lt $existing.Length -and ($existing[$end] -eq "`r" -or $existing[$end] -eq "`n")) {
+                    $end++
+                }
+                $existing = $existing.Remove($start, $end - $start)
+            }
         }
     }
 
     $block = $snippet.TrimEnd() + [Environment]::NewLine
     if ($existing -and -not $existing.EndsWith("`n")) {
-        $block = [Environment]::NewLine + $block
+        $existing = $existing + [Environment]::NewLine
     }
-    Add-Content -LiteralPath $ProfilePath -Value $block -Encoding UTF8
+    $combined = $existing + $block
+    $dirForFile = Split-Path -Parent $ProfilePath
+    if ($dirForFile -and -not (Test-Path -LiteralPath $dirForFile)) {
+        New-Item -ItemType Directory -Path $dirForFile -Force | Out-Null
+    }
+    Set-Content -LiteralPath $ProfilePath -Value $combined -Encoding UTF8
 }
 
 function Get-CmdPeekLastInstallPath {

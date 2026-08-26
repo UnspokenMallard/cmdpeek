@@ -151,7 +151,58 @@ function Get-CmdPeekUsageExample {
         }
     }
 
+    if ($usages.Count -eq 0) {
+        $ai = @(Get-CmdPeekMockAiExample -Command $Command -Count $Count -DataDirectory $DataDirectory)
+        if ($ai.Count -gt 0) { $usages = @($ai) }
+    }
+
     return @(Select-CmdPeekDisplayUsage -Usage $usages -Count $Count)
+}
+
+function Get-CmdPeekMockAiExamplePath {
+    param([string]$DataDirectory)
+
+    if ($env:CMDPEEK_OPENAI_MOCK_PATH -and (Test-Path -LiteralPath $env:CMDPEEK_OPENAI_MOCK_PATH)) {
+        return $env:CMDPEEK_OPENAI_MOCK_PATH
+    }
+    if ($DataDirectory) {
+        $local = Join-Path $DataDirectory 'openai-examples.json'
+        if (Test-Path -LiteralPath $local) { return $local }
+    }
+    return $null
+}
+
+function Get-CmdPeekMockAiExample {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [int]$Count = 3,
+        [string]$Path,
+        [string]$DataDirectory
+    )
+
+    if ($Count -lt 1) { $Count = 3 }
+    if (-not $Path) { $Path = Get-CmdPeekMockAiExamplePath -DataDirectory $DataDirectory }
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return @() }
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        return @()
+    }
+    if (-not $raw -or -not $raw.PSObject.Properties['commands'] -or -not $raw.commands) { return @() }
+    $prop = $raw.commands.PSObject.Properties | Where-Object { $_.Name -eq $Command } | Select-Object -First 1
+    if (-not $prop) {
+        $prop = $raw.commands.PSObject.Properties | Where-Object { $_.Name.ToLowerInvariant() -eq $Command.ToLowerInvariant() } | Select-Object -First 1
+    }
+    if (-not $prop -or -not $prop.Value) { return @() }
+    $entry = $prop.Value
+    $list = @()
+    if ($entry.PSObject.Properties['usages'] -and $entry.usages) {
+        $list = @(Get-CmdPeekCatalogUsageList -Entry $entry)
+    }
+    return @(Select-CmdPeekDisplayUsage -Usage $list -Count $Count)
 }
 
 function Get-CmdPeekTldrExample {

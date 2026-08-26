@@ -114,6 +114,16 @@ Describe 'Add-CmdPeekProfileHint' {
         $text | Should -Match 'function cargo'
         ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
     }
+
+    It 'upgrades a copied 0.1 profile fixture' {
+        $src = Join-Path $PSScriptRoot '..\examples\mocks\profile-v1.ps1'
+        $profilePath = Join-Path $TestDrive 'upgrade-profile.ps1'
+        Copy-Item -LiteralPath $src -Destination $profilePath
+        Add-CmdPeekProfileHint -ProfilePath $profilePath
+        $text = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8
+        $text | Should -Match 'function pipx'
+        ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
+    }
 }
 
 Describe 'Get-CmdPeekDataDirectory' {

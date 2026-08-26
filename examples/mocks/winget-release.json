@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "note": "Mock GitHub release metadata. InstallerSha256 is Get-FileHash of winget-portable-payload.txt, not a published ZIP.",
+  "packageIdentifier": "cmdpeek.cmdpeek",
+  "packageVersion": "0.2.0-mock",
+  "installerUrl": "https://github.com/cmdpeek/cmdpeek/releases/download/v0.2.0-mock/cmdpeek-win-x64.zip",
+  "installerSha256": "EFB66D74B23CD2219110F6366E69984EB8E7738F893C90B3F9008CEB1FA1C33E",
+  "payloadFile": "winget-portable-payload.txt",
+  "architecture": "x64",
+  "installerType": "portable"
+}

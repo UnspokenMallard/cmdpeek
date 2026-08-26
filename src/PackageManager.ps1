@@ -5,7 +5,7 @@ function Get-CmdPeekPackageManagerInstallHint {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')]
         [string]$Name
     )
 
@@ -30,6 +30,12 @@ function Get-CmdPeekPackageManagerInstallHint {
         }
         'brew' {
             return '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+        }
+        'apt' {
+            return 'sudo apt update; sudo apt install <package>'
+        }
+        'pacman' {
+            return 'sudo pacman -S <package>'
         }
     }
 }
@@ -81,6 +87,8 @@ function Get-CmdPeekPackageManager {
         [pscustomobject]@{ Name = 'npm';        Command = 'npm';    InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name npm) }
         [pscustomobject]@{ Name = 'cargo';      Command = 'cargo';  InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name cargo) }
         [pscustomobject]@{ Name = 'brew';       Command = 'brew';   InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name brew) }
+        [pscustomobject]@{ Name = 'apt';        Command = 'apt';    InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name apt) }
+        [pscustomobject]@{ Name = 'pacman';     Command = 'pacman'; InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name pacman) }
     )
 
     $result = foreach ($pm in $known) {
@@ -341,6 +349,8 @@ function Get-CmdPeekInstalledPackage {
         [string]$NpmRoot,
         [string]$CargoRoot,
         [string]$BrewRoot,
+        [string]$AptStatusPath,
+        [string]$PacmanRoot,
         [string[]]$EnabledManagers,
         [scriptblock]$CommandTester
     )
@@ -377,6 +387,12 @@ function Get-CmdPeekInstalledPackage {
             }
             'brew' {
                 foreach ($pkg in @(Get-CmdPeekBrewPackage -BrewRoot $BrewRoot)) { $packages.Add($pkg) }
+            }
+            'apt' {
+                foreach ($pkg in @(Get-CmdPeekAptPackage -StatusPath $AptStatusPath)) { $packages.Add($pkg) }
+            }
+            'pacman' {
+                foreach ($pkg in @(Get-CmdPeekPacmanPackage -LocalRoot $PacmanRoot)) { $packages.Add($pkg) }
             }
         }
     }

@@ -86,6 +86,12 @@ function Format-CmdPeekQuickOutput {
         if ($row.PSObject.Properties['LastLine'] -and $row.LastLine) { $last = [string]$row.LastLine }
         elseif ($row.PSObject.Properties['lastLine'] -and $row.lastLine) { $last = [string]$row.lastLine }
         if ($Rusty -and $last) { $lines.Add(('   last: {0}' -f $last)) }
+        $usedAt = $null
+        if ($row.PSObject.Properties['LastUsedAt'] -and $row.LastUsedAt) { $usedAt = $row.LastUsedAt }
+        elseif ($row.PSObject.Properties['lastUsedAt'] -and $row.lastUsedAt) { $usedAt = $row.lastUsedAt }
+        if ($Rusty -and $usedAt) {
+            $lines.Add(('   last used: {0}' -f (Format-CmdPeekDate -Value $usedAt)))
+        }
         $aligned = @(Format-CmdPeekAlignedUsage -Usage $entry.Usages -Count $ExampleCount -CommentColumn $commentColumn)
         foreach ($usage in $aligned) {
             $lines.Add(('   -  {0}' -f $usage))
