@@ -150,13 +150,23 @@ CmdLineException
 
 Describe 'Get-CmdPeekPeSubsystem' {
     It 'detects notepad as a GUI app and cmd as a console app' {
-        $notepad = Join-Path $env:SystemRoot 'System32\notepad.exe'
-        $cmd = $env:ComSpec
-        if (Test-Path -LiteralPath $notepad) {
+        $systemRoot = [string]$env:SystemRoot
+        $comSpec = [string]$env:ComSpec
+        $notepad = $null
+        if (-not [string]::IsNullOrWhiteSpace($systemRoot)) {
+            $notepad = Join-Path $systemRoot 'System32\notepad.exe'
+        }
+        if ([string]::IsNullOrWhiteSpace($notepad) -or -not (Test-Path -LiteralPath $notepad)) {
+            if ([string]::IsNullOrWhiteSpace($comSpec) -or -not (Test-Path -LiteralPath $comSpec)) {
+                Set-ItResult -Skipped -Because 'Windows PE test binaries are not available on this OS'
+                return
+            }
+        }
+        if ($notepad -and (Test-Path -LiteralPath $notepad)) {
             Get-CmdPeekPeSubsystem -Path $notepad | Should -Be 2
         }
-        if (Test-Path -LiteralPath $cmd) {
-            Get-CmdPeekPeSubsystem -Path $cmd | Should -Be 3
+        if (-not [string]::IsNullOrWhiteSpace($comSpec) -and (Test-Path -LiteralPath $comSpec)) {
+            Get-CmdPeekPeSubsystem -Path $comSpec | Should -Be 3
         }
     }
 }

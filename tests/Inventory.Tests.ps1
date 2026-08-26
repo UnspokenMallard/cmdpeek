@@ -6,6 +6,7 @@ BeforeAll {
     . (Join-Path $src 'PackageManager.ps1')
     . (Join-Path $src 'CommandHistory.ps1')
     . (Join-Path $src 'CommandUse.ps1')
+    . (Join-Path $src 'Catalog.ps1')
     . (Join-Path $src 'UsageExamples.ps1')
     . (Join-Path $src 'Inventory.ps1')
 }
@@ -257,6 +258,25 @@ Describe 'Get-CmdPeekGap' {
         }
         $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits @{})
         @($gaps | Where-Object { $_.kind -eq 'category-neighbor' }).Count | Should -Be 0
+    }
+
+    It 'does not suggest a related tool when an installed substitute already covers it' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'rg'; PackageName = 'ripgrep'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('rg x'); Related = @('grep')
+            }
+        )
+        $catalog = @{
+            'rg' = [pscustomobject]@{
+                category = 'dev-tools'; related = @('grep'); substitutes = @('grep'); usages = @('rg x')
+            }
+            'grep' = [pscustomobject]@{
+                category = 'dev-tools'; related = @('rg'); usages = @('grep x')
+            }
+        }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog)
+        @($gaps | Where-Object { $_.kind -eq 'missing-related' -and $_.command -eq 'grep' }).Count | Should -Be 0
     }
 }
 

@@ -24,20 +24,25 @@ Thanks for helping. cmdpeek is a PowerShell 5.1-compatible Windows CLI. Keep tha
 - Do not require PowerShell 7-only syntax (`??`, `?:`, `Join-Path` with more than two arguments, `-AsHashtable` on `ConvertFrom-Json`).
 - Package-manager queries must stay injectable (`-ChocolateyRoot`, `-ScoopRoot`, `-WinGetRoot`, `-CommandTester`) so tests never need a real choco/scoop/winget install.
 - Interactive prompts must honor `-NonInteractive`.
+- Default data paths must not assume `%LOCALAPPDATA%` is set (fall back to `$HOME/.local/share`).
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
 | `src/PackageManager.ps1` | Detect PMs; scan install roots |
+| `src/ExtraSources.ps1` | pipx / npm / cargo / brew / PATH catalog merge |
+| `src/Catalog.ps1` | Overlay, aliases, capabilities, substitutes, install IDs |
+| `src/TaskResolve.ps1` | Task → installed-first matching |
 | `src/CommandHistory.ps1` | Flatten, sort, search, missing-command diff |
-| `src/UsageExamples.ps1` | Catalog + help fallback |
-| `src/Config.ps1` | `%LOCALAPPDATA%\cmdpeek` state |
-| `src/InteractiveMode.ps1` | Menus, reinstall prompts |
+| `src/UsageExamples.ps1` | Catalog + help / tldr fallback |
+| `src/Config.ps1` | `%LOCALAPPDATA%\cmdpeek` state, last-install, inventory cache |
+| `src/InteractiveMode.ps1` | Menus, reinstall prompts, formatters |
 | `src/Tui.ps1` | Arrow-key TUI |
 | `src/Inventory.ps1` | JSON snapshot + gap analysis |
 | `mcp/` | MCP server for AI tools |
-| `docs/TASKS.md` | Improvement backlog (actionable checkboxes) |
+| `AGENTS.md` | Agent playbook |
+| `docs/TASKS.md` | Remaining follow-ons |
 
 New popular tools belong in the JSON catalog, not hardcoded in PowerShell.
 

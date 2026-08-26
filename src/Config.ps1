@@ -1,6 +1,16 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
+function Get-CmdPeekLocalAppData {
+    [CmdletBinding()]
+    param()
+
+    if ($env:LOCALAPPDATA) { return [string]$env:LOCALAPPDATA }
+    if ($env:XDG_DATA_HOME) { return [string]$env:XDG_DATA_HOME }
+    if ($HOME) { return (Join-Path $HOME '.local/share') }
+    return [System.IO.Path]::GetTempPath()
+}
+
 function Get-CmdPeekDataDirectory {
     [CmdletBinding()]
     param(
@@ -8,7 +18,7 @@ function Get-CmdPeekDataDirectory {
     )
 
     if ($DataDirectory) { return $DataDirectory }
-    return (Join-Path $env:LOCALAPPDATA 'cmdpeek')
+    return (Join-Path (Get-CmdPeekLocalAppData) 'cmdpeek')
 }
 
 function Get-CmdPeekStatePath {
@@ -174,7 +184,7 @@ function Set-CmdPeekPreferredPackageManager {
         [Parameter(Mandatory)]
         [object]$State,
         [Parameter(Mandatory)]
-        [ValidateSet('chocolatey', 'scoop', 'winget')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
         [string]$PackageManager
     )
 
@@ -242,6 +252,40 @@ function choco {
     & $app.Source @args
     if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
 }
+function winget {
+    $app = Get-Command winget -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'winget not found on PATH' }
+    & $app.Source @args
+    if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
+}
+function pipx {
+    $app = Get-Command pipx -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'pipx not found on PATH' }
+    & $app.Source @args
+    if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
+}
+function npm {
+    $app = Get-Command npm -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'npm not found on PATH' }
+    & $app.Source @args
+    $isGlobal = $false
+    foreach ($a in @($args)) {
+        if ($a -eq '-g' -or $a -eq '--global') { $isGlobal = $true }
+    }
+    if ($args.Count -ge 2 -and $args[0] -eq 'install' -and $isGlobal) { Invoke-CmdPeekHint }
+}
+function cargo {
+    $app = Get-Command cargo -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'cargo not found on PATH' }
+    & $app.Source @args
+    if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
+}
+function brew {
+    $app = Get-Command brew -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $app) { throw 'brew not found on PATH' }
+    & $app.Source @args
+    if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
+}
 # END cmdpeek hint
 '@
 
@@ -264,3 +308,99 @@ function choco {
     }
     Add-Content -LiteralPath $ProfilePath -Value $block -Encoding UTF8
 }
+
+function Get-CmdPeekLastInstallPath {
+    [CmdletBinding()]
+    param([string]$DataDirectory)
+    return (Join-Path (Get-CmdPeekDataDirectory -DataDirectory $DataDirectory) 'last-install.json')
+}
+
+function Save-CmdPeekLastInstall {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$Command,
+        [string]$DataDirectory
+    )
+
+    $rows = @(
+        foreach ($row in @($Command)) {
+            if (-not $row) { continue }
+            [pscustomobject]@{
+                command        = [string]$row.Command
+                packageName    = $(if ($row.PSObject.Properties['PackageName']) { [string]$row.PackageName } else { [string]$row.Command })
+                packageManager = [string]$row.PackageManager
+                installDate    = $(if ($row.PSObject.Properties['InstallDate'] -and $row.InstallDate) { ([datetime]$row.InstallDate).ToString('o') } else { $null })
+                usages         = $(if ($row.PSObject.Properties['Usages'] -and $row.Usages) { @($row.Usages | Select-Object -First 3) } else { @() })
+            }
+        }
+    )
+    $payload = [pscustomobject]@{
+        generatedAt = (Get-Date).ToString('o')
+        commands    = @($rows)
+    }
+    $dir = Get-CmdPeekDataDirectory -DataDirectory $DataDirectory
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $path = Get-CmdPeekLastInstallPath -DataDirectory $DataDirectory
+    ($payload | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath $path -Encoding UTF8
+    return $path
+}
+
+function Get-CmdPeekLastInstall {
+    [CmdletBinding()]
+    param([string]$DataDirectory)
+
+    $path = Get-CmdPeekLastInstallPath -DataDirectory $DataDirectory
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    try {
+        return (Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json)
+    }
+    catch {
+        return $null
+    }
+}
+
+function Get-CmdPeekInventoryCachePath {
+    [CmdletBinding()]
+    param([string]$DataDirectory)
+    return (Join-Path (Get-CmdPeekDataDirectory -DataDirectory $DataDirectory) 'inventory-cache.json')
+}
+
+function Save-CmdPeekInventoryCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Snapshot,
+        [string]$DataDirectory
+    )
+
+    $dir = Get-CmdPeekDataDirectory -DataDirectory $DataDirectory
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $path = Get-CmdPeekInventoryCachePath -DataDirectory $DataDirectory
+    ($Snapshot | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $path -Encoding UTF8
+}
+
+function Get-CmdPeekInventoryCache {
+    [CmdletBinding()]
+    param(
+        [string]$DataDirectory,
+        [int]$MaxAgeSeconds = 120
+    )
+
+    $path = Get-CmdPeekInventoryCachePath -DataDirectory $DataDirectory
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    $item = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+    if (-not $item) { return $null }
+    if (((Get-Date) - $item.LastWriteTime).TotalSeconds -gt $MaxAgeSeconds) { return $null }
+    try {
+        return (Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json)
+    }
+    catch {
+        return $null
+    }
+}
+

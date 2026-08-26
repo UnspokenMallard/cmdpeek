@@ -5,7 +5,7 @@ function Get-CmdPeekPackageManagerInstallHint {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('chocolatey', 'scoop', 'winget')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
         [string]$Name
     )
 
@@ -18,6 +18,18 @@ function Get-CmdPeekPackageManagerInstallHint {
         }
         'winget' {
             return 'Install "App Installer" from the Microsoft Store to get winget, or run: Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe'
+        }
+        'pipx' {
+            return 'python -m pip install --user pipx; pipx ensurepath'
+        }
+        'npm' {
+            return 'Install Node.js from https://nodejs.org then use: npm install -g <package>'
+        }
+        'cargo' {
+            return 'Invoke-RestMethod https://sh.rustup.rs -OutFile rustup-init.ps1; # or winget install Rustlang.Rustup'
+        }
+        'brew' {
+            return '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
         }
     }
 }
@@ -40,7 +52,9 @@ function Get-CmdPeekDefaultInstallRoot {
             return (Join-Path $HOME 'scoop')
         }
         'winget' {
-            return (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages')
+            $localApp = $env:LOCALAPPDATA
+            if (-not $localApp) { $localApp = Join-Path $HOME '.local' }
+            return (Join-Path $localApp 'Microsoft\WinGet\Packages')
         }
     }
 }
@@ -63,6 +77,10 @@ function Get-CmdPeekPackageManager {
         [pscustomobject]@{ Name = 'chocolatey'; Command = 'choco';  InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name chocolatey) }
         [pscustomobject]@{ Name = 'scoop';      Command = 'scoop';  InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name scoop) }
         [pscustomobject]@{ Name = 'winget';     Command = 'winget'; InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name winget) }
+        [pscustomobject]@{ Name = 'pipx';       Command = 'pipx';   InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name pipx) }
+        [pscustomobject]@{ Name = 'npm';        Command = 'npm';    InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name npm) }
+        [pscustomobject]@{ Name = 'cargo';      Command = 'cargo';  InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name cargo) }
+        [pscustomobject]@{ Name = 'brew';       Command = 'brew';   InstallHint = (Get-CmdPeekPackageManagerInstallHint -Name brew) }
     )
 
     $result = foreach ($pm in $known) {
@@ -216,6 +234,20 @@ function Get-CmdPeekChocolateyPackage {
         )
 
         $commands = @($matched | ForEach-Object { $_.BaseName } | Select-Object -Unique)
+        if ($commands.Count -eq 0) {
+            $pkgExes = @(
+                Get-ChildItem -LiteralPath $pkgDir.FullName -File -Recurse -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Extension -match '\.(exe|cmd|bat|ps1)$' -and $_.BaseName -notmatch 'uninstall|setup|chocolatey' }
+            )
+            $fromPkg = @(
+                foreach ($exe in $pkgExes) {
+                    $stem = $exe.BaseName
+                    $shimHit = @($shims | Where-Object { $_.BaseName -eq $stem })
+                    if ($shimHit.Count -gt 0) { $stem }
+                }
+            )
+            $commands = @($fromPkg | Select-Object -Unique)
+        }
         if ($commands.Count -eq 0) { continue }
 
         $nuspec = Get-ChildItem -LiteralPath $pkgDir.FullName -Filter '*.nuspec' -File -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -279,9 +311,16 @@ function Get-CmdPeekWinGetPackage {
         }
         if ($commands.Count -eq 0) { continue }
 
+        $version = $null
+        $versionDir = Get-ChildItem -LiteralPath $pkgDir.FullName -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+\.\d+' } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+        if ($versionDir) { $version = $versionDir.Name }
+
         [pscustomobject]@{
             Name           = $id
-            Version        = $null
+            Version        = $version
             PackageManager = 'winget'
             InstallDate    = $pkgDir.LastWriteTime
             Commands       = @($commands)
@@ -298,6 +337,10 @@ function Get-CmdPeekInstalledPackage {
         [string]$ChocolateyRoot,
         [string]$ScoopRoot,
         [string]$WinGetRoot,
+        [string]$PipxRoot,
+        [string]$NpmRoot,
+        [string]$CargoRoot,
+        [string]$BrewRoot,
         [string[]]$EnabledManagers,
         [scriptblock]$CommandTester
     )
@@ -322,6 +365,18 @@ function Get-CmdPeekInstalledPackage {
             }
             'winget' {
                 foreach ($pkg in @(Get-CmdPeekWinGetPackage -WinGetRoot $WinGetRoot -CommandTester $CommandTester)) { $packages.Add($pkg) }
+            }
+            'pipx' {
+                foreach ($pkg in @(Get-CmdPeekPipxPackage -PipxRoot $PipxRoot)) { $packages.Add($pkg) }
+            }
+            'npm' {
+                foreach ($pkg in @(Get-CmdPeekNpmPackage -NpmRoot $NpmRoot)) { $packages.Add($pkg) }
+            }
+            'cargo' {
+                foreach ($pkg in @(Get-CmdPeekCargoPackage -CargoRoot $CargoRoot)) { $packages.Add($pkg) }
+            }
+            'brew' {
+                foreach ($pkg in @(Get-CmdPeekBrewPackage -BrewRoot $BrewRoot)) { $packages.Add($pkg) }
             }
         }
     }

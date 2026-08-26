@@ -1,9 +1,11 @@
 # cmdpeek
 
-Show the **N most recently installed CLI commands** from Chocolatey, Scoop, and WinGet — plus the 1–3 usages you actually need.
+Show the **N most recently installed CLI commands** — and, for agents, **which installed tool already solves the task**.
 
 ```powershell
 cmdpeek 3
+cmdpeek for json
+cmdpeek have search
 ```
 
 ```
@@ -24,7 +26,7 @@ Last 3 installed commands:
 
 ## Why cmdpeek?
 
-Package managers tell you *what* is installed. They do not remind you *how* to use the new binary, or that you uninstalled it last week. cmdpeek reads local install metadata (no scraping of PM logs in v0.1 — filesystem + manifests), caches it, and attaches community examples.
+Package managers tell you *what* is installed. They do not remind you *how* to use the new binary, or that you uninstalled it last week. cmdpeek reads local install metadata (filesystem + manifests), caches it, and attaches community examples.
 
 ## Install
 
@@ -66,24 +68,31 @@ The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https
 
 ### First run with no package manager
 
-cmdpeek detects `choco`, `scoop`, and `winget`. If none are on PATH it prints bootstrap commands and (in interactive mode) offers to run one:
+cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, and `brew`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog command names already on PATH are inventoried.
 
-1. **Scoop** — user-level, recommended
+1. **Scoop** — user-level, recommended on Windows
 2. **Chocolatey** — typically needs an elevated shell
 3. **WinGet** — App Installer / Microsoft Store
+4. **pipx / npm / cargo / Homebrew** — language and Unix toolchains, scanned when present
 
 ## Usage
 
 | Command | Mode |
 | --- | --- |
 | `cmdpeek` or `cmdpeek -i` | Arrow-key TUI (list + live preview) |
-| `cmdpeek 5` or `cmdpeek -n 5` | Quick view: installs **since last look** (default), up to N with 1–3 examples; if none, falls back to newest N with header `No new installs since …`; when there are no new installs, a short rusty block (up to 3 tools) may appear above that fallback |
+| `cmdpeek 5` or `cmdpeek -n 5` or `cmdpeek recent` | Quick view: installs **since last look** (default), up to N with 1–3 examples; if none, falls back to newest N; a short rusty block may appear above that fallback |
 | `cmdpeek -Since 7d` | Time window for quick view / MCP: `last` (default), `all`, ISO datetime, `24h`, or `7d` (minutes not supported) |
 | `cmdpeek -Search rg` | Unique exact name: cheat sheet (usages + missing related). Otherwise search. |
-| `cmdpeek fd` | Unique command name: cheat sheet (usages + missing related). Otherwise search. |
+| `cmdpeek fd` | Unique command name: cheat sheet (usages, substitutes, install line). Otherwise search. |
+| `cmdpeek explain fd` | Same idea as the cheat sheet, plus PATH winner and substitutes |
+| `cmdpeek for json` | **Installed tools first**, then catalog tools to install |
+| `cmdpeek why jq` | Why this tool exists here: managers, PATH winner, substitutes |
+| `cmdpeek have search` | Installed catalog tools you can already use (optional capability) |
+| `cmdpeek search-available fzf` | Catalog search (installed vs missing + install commands) |
+| `cmdpeek gaps` | Human-readable gaps |
 | `cmdpeek -Category media` | Filter by catalog category |
-| `cmdpeek -Json` | Full inventory JSON (for MCP / scripts) |
-| `cmdpeek -Gaps` | JSON gaps: missing related, thin docs, not-on-path, **shadowing**, incomplete **kits**, and **category-neighbor** |
+| `cmdpeek -Json` | Full inventory JSON (for MCP / scripts); add `-Refresh` to bypass cache |
+| `cmdpeek -Gaps` | JSON gaps: missing related, thin docs, not-on-path, **shadowing** (PATH winner), incomplete **kits** (with install commands), and **category-neighbor** |
 | `cmdpeek -Rusty` | Installed tools missing from recent PSReadLine history (never / not in last 500 lines) |
 | `cmdpeek -Export backup.json` | Backup favorites, hidden commands, and history |
 | `cmdpeek -Import backup.json` | Restore |
@@ -119,6 +128,7 @@ cmdpeek detects `choco`, `scoop`, and `winget`. If none are on PATH it prints bo
 | Shift+H | Show hidden commands only (toggle), so they can be unhidden |
 | h | Hide/unhide this command from `cmdpeek -n` quick view (still listed in the TUI) |
 | g | Gap view — related CLIs you do not have, and commands with only `--help` |
+| u | Use what you have — installed catalog tools by category / capability |
 | c / r | Copy or run the highlighted usage (`<placeholders>` are copied, not run) |
 | a | Clear filters |
 | ? or F1 | Key help |
@@ -155,21 +165,28 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 
 | Tool | Purpose |
 | --- | --- |
-| `list_recent_commands` | Recency envelope from `-Json -Recent`: optional `since` (`last`, `all`, ISO, `24h`, `7d`); `mode` is `delta` or `fallback`; each command includes `shims` and `onPath` |
-| `search_commands` | Find a CLI by name, category, or usage text |
-| `get_command` | Full detail + related missing tools |
-| `list_gaps` | Missing related, thin docs, not-on-path, shadowing, kit, and category-neighbor; filter with `kind` (`missing-related`, `thin-docs`, `not-on-path`, `shadowing`, `kit`, `category-neighbor`, `all`) |
-| `list_rusty` | Installed CLIs absent from recent PSReadLine history (never used or not in last 500 lines); filter with `kind` (`never`, `stale`, `all`) — not a packaging gap |
-| `list_package_managers` | choco / scoop / winget detection |
+| `list_recent_commands` | Recency envelope from `-Json -Recent` (usages, related, install commands, PATH) |
+| `search_commands` | Find a CLI by name, category, capability, or usage text |
+| `get_command` | Full detail for **installed or catalog-only** names |
+| `resolve_task` | Task → **installed first**, then missing catalog tools |
+| `explain_command` | Usages, PATH winner, substitutes, install lines |
+| `search_available` | Catalog search with install commands |
+| `list_installed_for` | Installed tools for a capability |
+| `list_gaps` | Missing related, thin docs, not-on-path, shadowing (PATH winner), kit, category-neighbor |
+| `list_rusty` | Installed CLIs absent from recent PSReadLine history |
+| `list_package_managers` | choco / scoop / winget / pipx / npm / cargo / brew detection |
 | `list_favorites` | User-starred commands |
 | `list_hidden` | Commands hidden from `-n` |
 | `set_hidden` | Hide/unhide a command from `-n` |
 | `set_favorite` | Star/unstar a command |
-| `refresh_inventory` | Rescan after install/uninstall |
+| `install_package` | Dry-run install command (set `execute` only with consent) |
+| `refresh_inventory` | Rescan after install/uninstall (bypasses cache) |
 
-Resources: `cmdpeek://inventory`, `cmdpeek://gaps`.
+Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://recent`, `cmdpeek://last-install`.
 
-Agents should call `list_recent_commands` after a package install and `list_gaps` when suggesting the next tool to add.
+Prompts: `after_install`, `prefer_installed`.
+
+Agents should call `resolve_task` before suggesting a new CLI, `refresh_inventory` + `list_recent_commands` after a package install, and must not run usages with `<placeholders>`.
 
 ### Uninstall detection
 
@@ -186,8 +203,10 @@ Command 'yt-dlp' was uninstalled. Reinstall it? [Y/n/chocolatey/scoop/winget]
 | Manager | Source |
 | --- | --- |
 | Scoop | `~\scoop\apps\<name>` timestamps + `manifest.json` `bin` |
-| Chocolatey | `%ChocolateyInstall%\lib\<pkg>` + `%ChocolateyInstall%\bin` shims |
+| Chocolatey | `%ChocolateyInstall%\lib\<pkg>` + `%ChocolateyInstall%\bin` shims (including shims whose exe lives inside the package folder) |
 | WinGet | `%LOCALAPPDATA%\Microsoft\WinGet\Packages` folder timestamps + `.exe` files that are console apps resolvable on PATH (GUI helpers are skipped) |
+| pipx / npm / cargo / brew | Isolated tool roots (`pipx` venvs, npm prefix, `~/.cargo/bin`, Homebrew Cellar) |
+| PATH | Catalog command names resolvable by `Get-Command` that no package manager claimed |
 
 Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
@@ -195,17 +214,19 @@ Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
 State lives in `%LOCALAPPDATA%\cmdpeek\state.json` (favorites, commands hidden from `-n`, preferred package manager, last scan). `state.json` does not include telemetry or example-use counters; those unused fields are ignored if an older file still has them.
 
-Optional AI examples are not called unless you add an API key later (`CMDPEEK_OPENAI_API_KEY` is reserved; unused in 0.1.0).
+Optional AI examples are not called unless you add an API key later (`CMDPEEK_OPENAI_API_KEY` is reserved; unused in 0.2.0). tldr pages are used as an optional local fallback when a command has no catalog examples.
 
 ## Shell integration
 
-`install.ps1 -AddProfileHint` appends scoop/choco wrappers to your PowerShell profile so `scoop install` / `choco install` print `cmdpeek -n 1` for the new command. You can also add the same snippet yourself:
+`install.ps1 -AddProfileHint` appends package-manager wrappers to your PowerShell profile so `scoop install` / `choco install` / `winget install` (and pipx/npm -g/cargo/brew) print `cmdpeek -n 1` for the new command. You can also add the same snippet yourself:
 
 ```powershell
 Add-CmdPeekProfileHint -ProfilePath $PROFILE
 ```
 
-The wrappers call the real `scoop`/`choco` executables, then `cmdpeek -NonInteractive -n 1`. Re-running the helper is a no-op if the snippet is already present.
+The wrappers call the real `scoop`/`choco`/`winget`/`pipx`/`npm`/`cargo`/`brew` executables, then `cmdpeek -NonInteractive -n 1` after an install (`npm` only for `npm install -g`). Re-running the helper is a no-op if the snippet is already present.
+
+Optional user catalog overlay: `%LOCALAPPDATA%\cmdpeek\catalog.overlay.json` (see `examples/catalog.overlay.example.json`).
 
 ## Development
 

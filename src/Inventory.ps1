@@ -17,9 +17,13 @@ function Get-CmdPeekGap {
     $installed = @{}
     foreach ($row in @($History)) {
         if ($row -and $row.Command) {
-            $installed[$row.Command.ToLowerInvariant()] = $row
+            $lk = $row.Command.ToLowerInvariant()
+            if (-not $installed.ContainsKey($lk)) {
+                $installed[$lk] = $row
+            }
         }
     }
+    $installedSet = Get-CmdPeekInstalledNameSet -History $History -Catalog $Catalog
 
     $relatedMap = @{}
     foreach ($row in @($History)) {
@@ -39,7 +43,7 @@ function Get-CmdPeekGap {
 
         foreach ($name in $names) {
             $key = $name.ToLowerInvariant()
-            if ($installed.ContainsKey($key)) { continue }
+            if (Test-CmdPeekNameCovered -Name $name -InstalledSet $installedSet -Catalog $Catalog) { continue }
             if (-not $relatedMap.ContainsKey($key)) {
                 $category = 'other'
                 $catEntry = Get-CmdPeekCatalogEntry -Command $name -Catalog $Catalog
@@ -135,13 +139,25 @@ function Get-CmdPeekGap {
         if ($first.PSObject.Properties['Category'] -and $first.Category) {
             $cat = [string]$first.Category
         }
+        $onPathManager = $null
+        foreach ($row in $rows) {
+            if ($row.PSObject.Properties['OnPath'] -and $row.OnPath) {
+                $onPathManager = [string]$row.PackageManager
+                break
+            }
+        }
+        $reason = 'Installed from more than one package manager'
+        if ($onPathManager) {
+            $reason = ('Installed from more than one package manager; PATH resolves {0}' -f $onPathManager)
+        }
         $gaps.Add([pscustomobject]@{
             kind            = 'shadowing'
             command         = [string]$first.Command
-            reason          = 'Installed from more than one package manager'
+            reason          = $reason
             relatedTo       = @()
             category        = $cat
             packageManagers = @($sortedPm)
+            onPathManager   = $onPathManager
         })
     }
 
@@ -162,7 +178,7 @@ function Get-CmdPeekGap {
         $members = @($Kits[$kitId])
         $anyInstalled = $false
         foreach ($member in $members) {
-            if ($member -and $installed.ContainsKey(([string]$member).ToLowerInvariant())) {
+            if ($member -and (Test-CmdPeekNameCovered -Name $member -InstalledSet $installedSet -Catalog $Catalog)) {
                 $anyInstalled = $true
                 break
             }
@@ -172,7 +188,7 @@ function Get-CmdPeekGap {
         foreach ($member in $members) {
             if (-not $member) { continue }
             $lk = ([string]$member).ToLowerInvariant()
-            if ($installed.ContainsKey($lk)) { continue }
+            if (Test-CmdPeekNameCovered -Name $member -InstalledSet $installedSet -Catalog $Catalog) { continue }
             if ($missingRelatedNames.ContainsKey($lk)) { continue }
             if ($kitSeen.ContainsKey($lk)) { continue }
             $kitSeen[$lk] = $true
@@ -187,12 +203,17 @@ function Get-CmdPeekGap {
                     $cat = [string]$entry.category
                 }
             }
+            $installCmds = @()
+            if (Get-Command Get-CmdPeekInstallCommands -ErrorAction SilentlyContinue) {
+                $installCmds = @(Get-CmdPeekInstallCommands -Command $commandName -Catalog $Catalog)
+            }
             $kitGaps.Add([pscustomobject]@{
-                kind      = 'kit'
-                command   = $commandName
-                reason    = "Incomplete kit '$kitId'"
-                relatedTo = @($kitId)
-                category  = $cat
+                kind             = 'kit'
+                command          = $commandName
+                reason           = "Incomplete kit '$kitId'"
+                relatedTo        = @($kitId)
+                category         = $cat
+                installCommands  = $installCmds
             })
         }
     }
@@ -224,8 +245,10 @@ function Get-CmdPeekGap {
             $byCatMissing[$cat] = New-Object System.Collections.Generic.List[string]
         }
         $lk = $ck.ToLowerInvariant()
-        if ($installed.ContainsKey($lk)) {
-            $byCatInstalled[$cat].Add([string]$installed[$lk].Command)
+        if (Test-CmdPeekNameCovered -Name $ck -InstalledSet $installedSet -Catalog $Catalog) {
+            $shown = $ck
+            if ($installed.ContainsKey($lk)) { $shown = [string]$installed[$lk].Command }
+            $byCatInstalled[$cat].Add($shown)
         }
         else {
             $byCatMissing[$cat].Add([string]$ck)
@@ -242,6 +265,7 @@ function Get-CmdPeekGap {
         foreach ($name in $cands) {
             $lk = $name.ToLowerInvariant()
             if ($covered.ContainsKey($lk)) { continue }
+            if (Test-CmdPeekNameCovered -Name $name -InstalledSet $installedSet -Catalog $Catalog) { continue }
             if ($kept -ge 3) { break }
             $neighborList.Add([pscustomobject]@{
                 kind      = 'category-neighbor'
@@ -324,6 +348,8 @@ function ConvertTo-CmdPeekSnapshot {
             if ($row.PSObject.Properties['InstallDate'] -and $row.InstallDate) {
                 try { $install = ([datetime]$row.InstallDate).ToString('o') } catch { $install = [string]$row.InstallDate }
             }
+            $usages = $(if ($row.PSObject.Properties['Usages'] -and $row.Usages) { @($row.Usages) } else { @() })
+            $entry = Get-CmdPeekCatalogEntry -Command $row.Command -Catalog $Catalog
             [pscustomobject]@{
                 command        = [string]$row.Command
                 packageName    = $(if ($row.PSObject.Properties['PackageName']) { [string]$row.PackageName } else { [string]$row.Command })
@@ -331,7 +357,11 @@ function ConvertTo-CmdPeekSnapshot {
                 installDate    = $install
                 version        = $(if ($row.PSObject.Properties['Version']) { $row.Version } else { $null })
                 category       = $(if ($row.PSObject.Properties['Category']) { [string]$row.Category } else { 'other' })
-                usages         = $(if ($row.PSObject.Properties['Usages'] -and $row.Usages) { @($row.Usages) } else { @() })
+                capabilities   = @(Get-CmdPeekCatalogCapabilityList -Entry $entry)
+                aliases        = @(Get-CmdPeekCatalogAliasList -Entry $entry)
+                substitutes    = @(Get-CmdPeekCatalogSubstituteList -Entry $entry)
+                usages         = $usages
+                usageDetails   = @(ConvertTo-CmdPeekStructuredUsage -Usage $usages)
                 related        = $(if ($row.PSObject.Properties['Related'] -and $row.Related) { @($row.Related) } else { @() })
                 favorite       = [bool]$(if ($row.PSObject.Properties['Favorite']) { $row.Favorite } else { $false })
                 hidden         = [bool]$(if ($row.PSObject.Properties['Hidden']) { $row.Hidden } else { $false })
@@ -356,6 +386,7 @@ function ConvertTo-CmdPeekSnapshot {
         generatedAt = (Get-Date).ToString('o')
         managers    = $managers
         commands    = $commands
+        catalog     = @(Get-CmdPeekCatalogIndex -Catalog $Catalog)
         favorites   = @($Favorite | Where-Object { $_ })
         hidden      = @($Hidden | Where-Object { $_ })
         gaps        = $gaps

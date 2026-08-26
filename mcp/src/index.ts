@@ -6,6 +6,13 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import {
+  filterCatalogCommand,
+  filterGaps,
+  filterRusty,
+  searchSnapshotCommands,
+  AGENT_PLAYBOOK,
+} from "./helpers.js";
 
 type Snapshot = {
   generatedAt?: string;
@@ -17,11 +24,25 @@ type Snapshot = {
     installDate?: string;
     version?: string;
     category?: string;
+    capabilities?: string[];
+    aliases?: string[];
+    substitutes?: string[];
     usages?: string[];
+    usageDetails?: Array<{ argv: string; comment?: string; unsafe?: boolean }>;
     related?: string[];
     favorite?: boolean;
     hidden?: boolean;
     onPath?: boolean;
+  }>;
+  catalog?: Array<{
+    command: string;
+    category?: string;
+    capabilities?: string[];
+    aliases?: string[];
+    related?: string[];
+    substitutes?: string[];
+    usages?: string[];
+    install?: Record<string, string>;
   }>;
   favorites?: string[];
   hidden?: string[];
@@ -33,6 +54,9 @@ type Snapshot = {
     category?: string;
     packageName?: string;
     packageManager?: string;
+    packageManagers?: string[];
+    onPathManager?: string;
+    installCommands?: string[];
   }>;
   rusty?: Array<{ command: string; kind: string; lastLine?: string; packageManager?: string }>;
 };
@@ -106,7 +130,8 @@ async function loadSnapshot(force = false): Promise<Snapshot> {
   if (!force && cache && Date.now() - cache.at < cacheMs) {
     return cache.data;
   }
-  const raw = await runCmdPeek(["-Json"]);
+  const extra = force ? ["-Json", "-Refresh"] : ["-Json"];
+  const raw = await runCmdPeek(extra);
   const data = JSON.parse(raw) as Snapshot;
   cache = { at: Date.now(), data };
   return data;
@@ -125,21 +150,20 @@ function asText(value: unknown): { content: Array<{ type: "text"; text: string }
   return { content: [{ type: "text", text: JSON.stringify(value, null, 2) }] };
 }
 
-function normalize(value: string | undefined): string {
-  return (value ?? "").toLowerCase();
-}
+const unsafeNote =
+  "Do not run usage lines that contain <placeholders> or usageDetails.unsafe=true; copy them for the user instead.";
 
 const server = new McpServer({
   name: "cmdpeek",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
 server.tool(
   "list_recent_commands",
-  "List recently installed CLI commands with package manager, date, category, and common usages. Use this to discover what tools the user just got.",
+  `List recently installed CLI commands with package manager, date, usages, related tools, and install lines. Call this after any package install. ${unsafeNote}`,
   {
     limit: z.number().int().min(1).max(200).optional().describe("Maximum commands to return (default 20)"),
-    since: z.string().optional().describe('Recency lower bound: omit = LastMcpAt cursor; "all" = newest N; ISO datetime or 24h/7d. Exclusive (InstallDate > instant), not on-or-after.'),
+    since: z.string().optional().describe('Recency lower bound: omit = LastMcpAt cursor; "all" = newest N; ISO datetime or 24h/7d.'),
     category: z.string().optional().describe("Optional category filter such as media, dev-tools, network, system"),
   },
   async ({ limit, since, category }) => {
@@ -155,48 +179,126 @@ server.tool(
 
 server.tool(
   "search_commands",
-  "Search installed commands by name, package manager, category, or usage text.",
+  "Search installed commands by name, package manager, category, capability, or usage text.",
   {
-    query: z.string().describe("Substring to match against command name, manager, category, or usages"),
+    query: z.string().describe("Substring to match against command name, manager, category, capabilities, or usages"),
     limit: z.number().int().min(1).max(200).optional(),
   },
   async ({ query, limit }) => {
     const snap = await loadSnapshot();
-    const needle = query.toLowerCase();
-    const hits = (snap.commands ?? []).filter((c) => {
-      const blob = [c.command, c.packageName, c.packageManager, c.category, ...(c.usages ?? [])]
-        .join("\n")
-        .toLowerCase();
-      return blob.includes(needle);
-    });
-    return asText({ query, commands: hits.slice(0, limit ?? 20) });
+    const hits = searchSnapshotCommands(snap.commands ?? [], query, limit ?? 20);
+    return asText({ query, commands: hits });
   },
 );
 
 server.tool(
   "get_command",
-  "Get full detail for one installed command: usages, related missing tools, package source, and whether it is a favorite.",
+  `Get full detail for a command. Works for installed inventory rows and catalog-only names (not installed). ${unsafeNote}`,
   {
     name: z.string().describe("Command name, e.g. fd or yt-dlp"),
   },
   async ({ name }) => {
     const snap = await loadSnapshot();
-    const command = (snap.commands ?? []).find((c) => normalize(c.command) === name.toLowerCase());
-    if (!command) {
-      return asText({ error: `Command '${name}' is not in the current cmdpeek inventory.` });
-    }
-    const relatedGaps = (snap.gaps ?? []).filter(
-      (g) =>
-        normalize(g.kind) === "missing-related" &&
-        (g.relatedTo ?? []).some((r) => normalize(r) === name.toLowerCase()),
+    const installed = (snap.commands ?? []).filter(
+      (c) => (c.command ?? "").toLowerCase() === name.toLowerCase(),
     );
-    return asText({ command, relatedGaps });
+    const catalog = filterCatalogCommand(snap.catalog ?? [], name);
+    if (installed.length === 0 && !catalog) {
+      return asText({ error: `Command '${name}' is not in the current cmdpeek inventory or catalog.` });
+    }
+    const relatedGaps = (snap.gaps ?? []).filter((g) => {
+      const kind = (g.kind ?? "").toLowerCase();
+      const related = g.relatedTo ?? [];
+      return (
+        (kind === "missing-related" || kind === "kit") &&
+        related.some((r) => r.toLowerCase() === name.toLowerCase())
+      );
+    });
+    return asText({
+      installed: installed[0] ?? null,
+      catalog: catalog ?? null,
+      relatedGaps,
+      note: unsafeNote,
+    });
+  },
+);
+
+server.tool(
+  "resolve_task",
+  "Map a task or capability to tools. Always prefer installed matches before suggesting a new package.",
+  {
+    task: z.string().describe('Task, capability, or tool name, e.g. "pretty-print json" or "search"'),
+    limit: z.number().int().min(1).max(50).optional(),
+  },
+  async ({ task }) => {
+    try {
+      const raw = await runCmdPeek(["-Task", task, "-Json"]);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "explain_command",
+  `Explain how to use a command: usages, PATH winner, substitutes, and install lines. ${unsafeNote}`,
+  {
+    name: z.string().describe("Command name"),
+  },
+  async ({ name }) => {
+    try {
+      const raw = await runCmdPeek(["-Explain", name, "-Json"]);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "search_available",
+  "Find catalog tools (installed first, then missing with install commands) matching a query. Use before recommending a new package.",
+  {
+    query: z.string().describe("Name, capability, or task"),
+  },
+  async ({ query }) => {
+    try {
+      const raw = await runCmdPeek(["-SearchAvailable", query, "-Json"]);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "list_installed_for",
+  "List installed catalog tools the user can already use, optionally filtered by capability.",
+  {
+    capability: z.string().optional().describe("Capability such as search, json, http, git, media"),
+    category: z.string().optional(),
+  },
+  async ({ capability, category }) => {
+    const extra = ["-Have", "-Json"];
+    if (capability) extra.push("-Capability", capability);
+    if (category) extra.push("-Category", category);
+    try {
+      const raw = await runCmdPeek(extra);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
   },
 );
 
 server.tool(
   "list_gaps",
-  "Identify tooling gaps: missing related CLIs, thin docs, not-on-path shims, the same name from more than one package manager, incomplete role kits, and same-category catalog tools. Use this to suggest what to install or document next.",
+  "Identify tooling gaps: missing related CLIs, thin docs, not-on-path, shadowing (includes PATH winner), incomplete kits with install commands, and category neighbors. Prefer resolve_task before telling the user to install something.",
   {
     kind: z
       .enum([
@@ -213,10 +315,7 @@ server.tool(
   },
   async ({ kind }) => {
     const snap = await loadSnapshot();
-    let gaps = snap.gaps ?? [];
-    if (kind && kind !== "all") {
-      gaps = gaps.filter((g) => normalize(g.kind) === kind);
-    }
+    const gaps = filterGaps(snap.gaps ?? [], kind);
     return asText({ gaps });
   },
 );
@@ -229,17 +328,14 @@ server.tool(
   },
   async ({ kind }) => {
     const snap = await loadSnapshot();
-    let rusty = snap.rusty ?? [];
-    if (kind && kind !== "all") {
-      rusty = rusty.filter((r) => normalize(r.kind) === kind);
-    }
+    const rusty = filterRusty(snap.rusty ?? [], kind);
     return asText({ rusty });
   },
 );
 
 server.tool(
   "list_package_managers",
-  "Show which Windows package managers cmdpeek detected (Chocolatey, Scoop, WinGet) and how to install any that are missing.",
+  "Show which package managers cmdpeek detected (Chocolatey, Scoop, WinGet, pipx, npm, cargo, brew) and how to install any that are missing.",
   async () => {
     const snap = await loadSnapshot();
     return asText({ managers: snap.managers ?? [] });
@@ -252,7 +348,7 @@ server.tool(
   async () => {
     const snap = await loadSnapshot();
     const names = new Set((snap.favorites ?? []).map((n) => n.toLowerCase()));
-    const commands = (snap.commands ?? []).filter((c) => names.has(normalize(c.command)));
+    const commands = (snap.commands ?? []).filter((c) => names.has((c.command ?? "").toLowerCase()));
     return asText({ favorites: snap.favorites ?? [], commands });
   },
 );
@@ -264,7 +360,7 @@ server.tool(
     const snap = await loadSnapshot();
     const names = new Set((snap.hidden ?? []).map((n) => n.toLowerCase()));
     const commands = (snap.commands ?? []).filter(
-      (c) => Boolean(c.hidden) || names.has(normalize(c.command)),
+      (c) => Boolean(c.hidden) || names.has((c.command ?? "").toLowerCase()),
     );
     return asText({ hidden: snap.hidden ?? [], commands });
   },
@@ -272,7 +368,7 @@ server.tool(
 
 server.tool(
   "set_hidden",
-  "Hide or unhide a command from cmdpeek -n quick view without opening the TUI. Use this to hide GUI tools such as LogExpert from the recent list.",
+  "Hide or unhide a command from cmdpeek -n quick view without opening the TUI.",
   {
     name: z.string().describe("Command name, e.g. LogExpert"),
     hidden: z.boolean().describe("true to hide from -n, false to show it again"),
@@ -301,8 +397,39 @@ server.tool(
 );
 
 server.tool(
+  "install_package",
+  "Return (or optionally execute) a package-manager install command for a catalog tool. Default is dry-run. Set execute=true only with user consent.",
+  {
+    name: z.string().describe("Command or package name"),
+    manager: z.enum(["scoop", "chocolatey", "winget"]).optional(),
+    execute: z.boolean().optional().describe("If true, run cmdpeek -Reinstall. Default false (dry-run)."),
+  },
+  async ({ name, manager, execute }) => {
+    const snap = await loadSnapshot();
+    const catalog = filterCatalogCommand(snap.catalog ?? [], name);
+    const install = catalog?.install ?? {};
+    const pref = manager ?? "scoop";
+    const id = install[pref] ?? install.scoop ?? install.winget ?? install.chocolatey ?? name;
+    const command =
+      pref === "chocolatey"
+        ? `choco install ${id} -y`
+        : pref === "winget"
+          ? `winget install --id ${id} -e --accept-package-agreements --accept-source-agreements`
+          : `scoop install ${id}`;
+    if (!execute) {
+      return asText({ dryRun: true, command, manager: pref, packageId: id });
+    }
+    const extra = ["-Reinstall", name];
+    if (manager) extra.push("-Manager", manager);
+    await runCmdPeek(extra);
+    cache = null;
+    return asText({ executed: true, command, manager: pref, packageId: id });
+  },
+);
+
+server.tool(
   "refresh_inventory",
-  "Rescan Chocolatey/Scoop/WinGet install roots and refresh the cmdpeek cache. Call this after installing or uninstalling a package.",
+  "Rescan package managers and PATH, bypass caches. Call this after installing or uninstalling a package, then call list_recent_commands.",
   async () => {
     const snap = await loadSnapshot(true);
     return asText({
@@ -335,6 +462,73 @@ server.resource("gaps", "cmdpeek://gaps", async () => {
     ],
   };
 });
+
+server.resource("recent", "cmdpeek://recent", async () => {
+  const payload = await loadRecent({ limit: 20 });
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://recent",
+        mimeType: "application/json",
+        text: JSON.stringify(payload, null, 2),
+      },
+    ],
+  };
+});
+
+server.resource("last-install", "cmdpeek://last-install", async () => {
+  const raw = await runCmdPeek(["-LastInstall"]);
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://last-install",
+        mimeType: "application/json",
+        text: raw,
+      },
+    ],
+  };
+});
+
+server.registerPrompt(
+  "after_install",
+  {
+    title: "After a package install",
+    description: "How an agent should discover newly installed commands with cmdpeek",
+  },
+  async () => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: AGENT_PLAYBOOK,
+        },
+      },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "prefer_installed",
+  {
+    title: "Prefer installed tools",
+    description: "Resolve a user task against tools already on the machine before suggesting installs",
+    argsSchema: {
+      task: z.string().describe("What the user wants to do"),
+    },
+  },
+  async ({ task }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: `The user wants to: ${task}\n\nCall cmdpeek resolve_task with that text. If installed matches exist, use those and show usages. Only suggest a missing catalog tool if nothing installed covers the task. ${unsafeNote}`,
+        },
+      },
+    ],
+  }),
+);
 
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();

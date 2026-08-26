@@ -7,7 +7,10 @@ $script:CmdPeekModuleRoot = $PSScriptRoot
 . (Join-Path $PSScriptRoot 'PackageManager.ps1')
 . (Join-Path $PSScriptRoot 'CommandHistory.ps1')
 . (Join-Path $PSScriptRoot 'CommandUse.ps1')
+. (Join-Path $PSScriptRoot 'Catalog.ps1')
 . (Join-Path $PSScriptRoot 'UsageExamples.ps1')
+. (Join-Path $PSScriptRoot 'ExtraSources.ps1')
+. (Join-Path $PSScriptRoot 'TaskResolve.ps1')
 . (Join-Path $PSScriptRoot 'InteractiveMode.ps1')
 . (Join-Path $PSScriptRoot 'Inventory.ps1')
 . (Join-Path $PSScriptRoot 'Tui.ps1')
@@ -21,7 +24,7 @@ function Invoke-CmdPeek {
         [string]$Category,
         [switch]$NonInteractive,
         [string]$Reinstall,
-        [ValidateSet('chocolatey', 'scoop', 'winget')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
         [string]$Manager,
         [string]$Export,
         [string]$Import,
@@ -43,14 +46,34 @@ function Invoke-CmdPeek {
         [string]$Hide,
         [string]$Unhide,
         [string]$Star,
-        [string]$Unstar
+        [string]$Unstar,
+        [string]$Task,
+        [string]$Why,
+        [string]$Explain,
+        [string]$SearchAvailable,
+        [switch]$Have,
+        [string]$Capability,
+        [switch]$Refresh,
+        [switch]$HumanGaps,
+        [switch]$LastInstall,
+        [scriptblock]$PackageSearchRunner,
+        [string]$PipxRoot,
+        [string]$NpmRoot,
+        [string]$CargoRoot,
+        [string]$BrewRoot
     )
 
     if ($Recent) {
         $Json = $true
         $NonInteractive = $true
     }
-    if ($Json -or $Gaps) {
+    if ($Json -or $Gaps -or $HumanGaps) {
+        $NonInteractive = $true
+    }
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have) {
+        $NonInteractive = $true
+    }
+    if ($LastInstall) {
         $NonInteractive = $true
     }
     if ($Rusty -and -not $Interactive) {
@@ -60,11 +83,12 @@ function Invoke-CmdPeek {
     $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
     if ($NonInteractive) { $useInteractive = $false }
     if ($Rusty -and -not $Interactive) { $useInteractive = $false }
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
     $isRecencyPath = [bool]$Recent -or (
-        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and (
+        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and (
             $Count -gt 0 -or (-not $Search -and -not $Category)
         )
     )
@@ -85,6 +109,17 @@ function Invoke-CmdPeek {
     if ($Export -and -not $Interactive) {
         Export-CmdPeekState -Path $Export -DataDirectory $DataDirectory
         Write-Host "Exported state to $Export"
+        return
+    }
+
+    if ($LastInstall) {
+        $last = Get-CmdPeekLastInstall -DataDirectory $DataDirectory
+        if (-not $last) {
+            Write-Output (@{ generatedAt = $null; commands = @() } | ConvertTo-Json -Depth 6)
+        }
+        else {
+            Write-Output ($last | ConvertTo-Json -Depth 8)
+        }
         return
     }
 
@@ -115,7 +150,6 @@ function Invoke-CmdPeek {
         if ($detected.Count -eq 0) {
             Show-CmdPeekNoManagerPrompt -NonInteractive:$NonInteractive
             $detected = @(Get-CmdPeekPackageManager -CommandTester $CommandTester)
-            if ($detected.Count -eq 0) { return }
         }
         $managerNames = @($detected | Select-Object -ExpandProperty Name)
     }
@@ -148,11 +182,19 @@ function Invoke-CmdPeek {
             -ChocolateyRoot $ChocolateyRoot `
             -ScoopRoot $ScoopRoot `
             -WinGetRoot $WinGetRoot `
+            -PipxRoot $PipxRoot `
+            -NpmRoot $NpmRoot `
+            -CargoRoot $CargoRoot `
+            -BrewRoot $BrewRoot `
             -EnabledManagers $managerNames `
             -CommandTester $CommandTester)
 
     $history = @(Get-CmdPeekCommandHistory -Package $packages)
-    $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath
+    $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath -DataDirectory $DataDirectory
+    $includePath = -not $PSBoundParameters.ContainsKey('EnabledManagers') -or (@($managerNames) -contains 'path')
+    if ($includePath) {
+        $history = @(Add-CmdPeekPathCommands -History $history -Catalog $catalog -CommandTester $CommandTester)
+    }
     $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -SkipHelpProbe)
 
     $state = Get-CmdPeekState -DataDirectory $DataDirectory
@@ -174,6 +216,70 @@ function Invoke-CmdPeek {
     )
     $state.LastScan = (Get-Date).ToString('o')
     Save-CmdPeekState -State $state -DataDirectory $DataDirectory
+
+    $preferred = $state.PreferredPackageManager
+
+    if ($Task) {
+        $resolved = Resolve-CmdPeekTask -Task $Task -History $history -Catalog $catalog -PreferredManager $preferred
+        if ($Json) {
+            Write-Output ($resolved | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekTaskOutput -Result $resolved)
+        }
+        return
+    }
+
+    if ($Why) {
+        $whyRow = Get-CmdPeekWhyCommand -Command $Why -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+        if ($Json) {
+            Write-Output ($whyRow | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekWhyOutput -Result $whyRow)
+        }
+        return
+    }
+
+    if ($SearchAvailable) {
+        $avail = Search-CmdPeekAvailable -Query $SearchAvailable -History $history -Catalog $catalog -PreferredManager $preferred -PackageSearchRunner $PackageSearchRunner
+        if ($Json) {
+            Write-Output ($avail | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekAvailableOutput -Result $avail)
+        }
+        return
+    }
+
+    if ($Have) {
+        $haveRows = @(Get-CmdPeekHaveList -History $history -Catalog $catalog -Capability $Capability -Category $Category)
+        if ($Json) {
+            Write-Output ([pscustomobject]@{ commands = $haveRows } | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekHaveOutput -History $haveRows)
+        }
+        return
+    }
+
+    if ($Explain) {
+        $whyRow = Get-CmdPeekWhyCommand -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+        $exact = @(Select-CmdPeekExactCommand -History $history -Query $Explain)
+        if ($exact.Count -eq 1) {
+            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+            if ($probed.Count -gt 0 -and $probed[0].PSObject.Properties['Usages']) {
+                $whyRow.usages = @($probed[0].Usages)
+            }
+        }
+        if ($Json) {
+            Write-Output ($whyRow | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekWhyOutput -Result $whyRow)
+        }
+        return
+    }
 
     # Category/Search on flat inventory only. Recency paths group first, then filter rows.
     # Human exact-search skips early substring so hidden rows stay eligible for Select-CmdPeekExactCommand.
@@ -216,10 +322,13 @@ function Invoke-CmdPeek {
                     version        = $(if ($row.PSObject.Properties['Version']) { $row.Version } else { $null })
                     category       = $(if ($row.PSObject.Properties['Category']) { $row.Category } else { 'other' })
                     usages         = $(if ($row.PSObject.Properties['Usages']) { @($row.Usages) } else { @() })
+                    usageDetails   = @(ConvertTo-CmdPeekStructuredUsage -Usage $(if ($row.PSObject.Properties['Usages']) { @($row.Usages) } else { @() }))
+                    related        = $(if ($row.PSObject.Properties['Related'] -and $row.Related) { @($row.Related) } else { @() })
                     shims          = $(if ($row.PSObject.Properties['Shims']) { @($row.Shims) } else { @() })
                     onPath         = [bool]($row.PSObject.Properties['OnPath'] -and $row.OnPath)
                     hidden         = $false
                     favorite       = [bool]($row.PSObject.Properties['Favorite'] -and $row.Favorite)
+                    installCommands = @(Get-CmdPeekInstallCommands -Command $row.Command -Catalog $catalog -PreferredManager $preferred)
                 }
             }
         )
@@ -232,12 +341,24 @@ function Invoke-CmdPeek {
         if (@($commands).Count -gt 0) {
             $state.LastMcpAt = (Get-Date).ToString('o')
             Save-CmdPeekState -State $state -DataDirectory $DataDirectory
+            if ($mode -eq 'delta') {
+                [void](Save-CmdPeekLastInstall -Command $rows -DataDirectory $DataDirectory)
+            }
         }
         Write-Output ($payload | ConvertTo-Json -Depth 8)
         return
     }
 
-    if ($Json -or $Gaps) {
+    if ($Json -or $Gaps -or $HumanGaps) {
+        if ($Json -and -not $Gaps -and -not $HumanGaps -and -not $Refresh) {
+            $cached = Get-CmdPeekInventoryCache -DataDirectory $DataDirectory
+            if ($cached) {
+                $cached | Add-Member lastPeekAt $state.LastPeekAt -Force
+                $cached | Add-Member lastMcpAt $state.LastMcpAt -Force
+                Write-Output ($cached | ConvertTo-Json -Depth 10)
+                return
+            }
+        }
         $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
         $snapArgs = @{
             History        = $history
@@ -252,8 +373,16 @@ function Invoke-CmdPeek {
             $snapArgs.HistoryPath = $HistoryPath
         }
         $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
-        if ($Gaps) {
+        if ($Gaps -and -not $HumanGaps) {
             Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+        }
+        elseif ($HumanGaps) {
+            if ($Json) {
+                Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+            }
+            else {
+                Write-Output (Format-CmdPeekGapOutput -Gap @($snapshot.gaps))
+            }
         }
         else {
             if ($Count -gt 0) {
@@ -261,7 +390,8 @@ function Invoke-CmdPeek {
             }
             $snapshot | Add-Member lastPeekAt $state.LastPeekAt -Force
             $snapshot | Add-Member lastMcpAt $state.LastMcpAt -Force
-            Write-Output ($snapshot | ConvertTo-Json -Depth 8)
+            Save-CmdPeekInventoryCache -Snapshot $snapshot -DataDirectory $DataDirectory
+            Write-Output ($snapshot | ConvertTo-Json -Depth 10)
         }
         return
     }
@@ -297,7 +427,7 @@ function Invoke-CmdPeek {
     }
 
     if ($useInteractive) {
-        $kits = Get-CmdPeekCatalogKits
+        $kits = Get-CmdPeekCatalogKits -Path $ExamplesPath -DataDirectory $DataDirectory
         $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
         Invoke-CmdPeekInteractive -History $history -State $state -DataDirectory $DataDirectory -Gap $gapList -Catalog $catalog -HelpRunner $HelpRunner
         return
@@ -321,6 +451,9 @@ function Invoke-CmdPeek {
                         ForEach-Object { [string]$_.command }
                 )
                 $row | Add-Member -NotePropertyName MissingRelated -NotePropertyValue $missing -Force
+                $whyRow = Get-CmdPeekWhyCommand -Command $row.Command -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+                $row | Add-Member -NotePropertyName SubstitutesInstalled -NotePropertyValue @($whyRow.substitutesInstalled) -Force
+                $row | Add-Member -NotePropertyName InstallCommands -NotePropertyValue @($whyRow.installCommands) -Force
                 $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
                 Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 5 -CheatSheet)
                 return
@@ -416,6 +549,9 @@ function Invoke-CmdPeek {
         Write-Output $rustyOut
     }
     Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 3 -Header $header)
+    if (-not $emptyDelta -and $slice.Count -gt 0) {
+        [void](Save-CmdPeekLastInstall -Command $slice -DataDirectory $DataDirectory)
+    }
     $state.LastPeekAt = (Get-Date).ToString('o')
     Save-CmdPeekState -State $state -DataDirectory $DataDirectory
 }
@@ -449,4 +585,16 @@ Export-ModuleMember -Function @(
     'Convert-CmdPeekSince'
     'Select-CmdPeekJustInstalled'
     'Get-CmdPeekRusty'
+    'Resolve-CmdPeekTask'
+    'Get-CmdPeekWhyCommand'
+    'Get-CmdPeekHaveList'
+    'Search-CmdPeekAvailable'
+    'Test-CmdPeekCatalog'
+    'Get-CmdPeekLastInstall'
+    'Get-CmdPeekInstallCommands'
+    'Add-CmdPeekPathCommands'
+    'Format-CmdPeekTaskOutput'
+    'Format-CmdPeekWhyOutput'
+    'Format-CmdPeekHaveOutput'
+    'Format-CmdPeekGapOutput'
 )

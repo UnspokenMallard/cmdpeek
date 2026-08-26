@@ -47,6 +47,7 @@ Describe 'Convert-CmdPeekKey' {
         Convert-CmdPeekKey -Key 'F' -KeyChar 'f' | Should -Be 'Favorite'
         Convert-CmdPeekKey -Key 'H' -KeyChar 'h' | Should -Be 'Hide'
         Convert-CmdPeekKey -Key 'G' -KeyChar 'g' | Should -Be 'Gaps'
+        Convert-CmdPeekKey -Key 'U' -KeyChar 'u' | Should -Be 'Have'
         Convert-CmdPeekKey -Key 'C' -KeyChar 'c' | Should -Be 'Copy'
         Convert-CmdPeekKey -Key 'R' -KeyChar 'r' | Should -Be 'Run'
         Convert-CmdPeekKey -Key 'Oem2' -KeyChar '?' | Should -Be 'Help'
@@ -96,6 +97,14 @@ Describe 'Update-CmdPeekTuiState' {
         $state = New-CmdPeekTuiState
         $state = Update-CmdPeekTuiState -State $state -Action 'Gaps' -ViewCount 3
         $state.View | Should -Be 'gaps'
+        $state = Update-CmdPeekTuiState -State $state -Action 'Escape' -ViewCount 3
+        $state.View | Should -Be 'list'
+    }
+
+    It 'opens the use-what-you-have view with Have and leaves it with escape' {
+        $state = New-CmdPeekTuiState
+        $state = Update-CmdPeekTuiState -State $state -Action 'Have' -ViewCount 3
+        $state.View | Should -Be 'have'
         $state = Update-CmdPeekTuiState -State $state -Action 'Escape' -ViewCount 3
         $state.View | Should -Be 'list'
     }
