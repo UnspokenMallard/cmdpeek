@@ -801,6 +801,70 @@ Describe 'task resolver CLI' {
         $text = $output | Out-String
         $text | Should -Match 'You already have'
         $text | Should -Match 'jq'
+        $text | Should -Not -Match '(?m)^\s+choco\s'
+        $text | Should -Not -Match '(?m)^\s+fx \('
+        $text | Should -Not -Match '(?m)^\s+yq \('
+    }
+
+    It 'lists installed search tools for -Have' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-have'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+
+        $output = Invoke-CmdPeek -Have -Capability search -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-have') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-have') `
+            -DataDirectory (Join-Path $TestDrive 'have-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
+
+        $text = $output | Out-String
+        $text | Should -Match 'fd'
+        $text | Should -Not -Match '(?m)\bjq\b'
+    }
+
+    It 'explains an installed command with usages' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-explain'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+
+        $output = Invoke-CmdPeek -Explain fd -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-explain') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-explain') `
+            -DataDirectory (Join-Path $TestDrive 'explain-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
+
+        $text = $output | Out-String
+        $text | Should -Match 'fd'
+        $text | Should -Match 'scoop'
+        $text | Should -Match 'Find files'
+    }
+
+    It 'searches catalog tools with -SearchAvailable' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-avail'
+        $app = Join-Path $scoopRoot 'apps\jq\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"1.7.1","bin":"jq.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+
+        $output = Invoke-CmdPeek -SearchAvailable json -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-avail') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-avail') `
+            -DataDirectory (Join-Path $TestDrive 'avail-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
+
+        $text = $output | Out-String
+        $text | Should -Match 'Search: json'
+        $text | Should -Match 'jq'
     }
 
     It 'writes last-install.json when there is a just-installed delta' {

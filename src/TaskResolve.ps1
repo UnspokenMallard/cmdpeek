@@ -163,6 +163,7 @@ function Resolve-CmdPeekTask {
             if ($historyByName.ContainsKey($nk)) { $row = $historyByName[$nk]; break }
         }
         $covered = Test-CmdPeekNameCovered -Name $key -InstalledSet $installedSet -Catalog $Catalog
+        $actuallyInstalled = $null -ne $row
         $item = [pscustomobject]@{
             command          = [string]$key
             score            = [int]$scored.Score
@@ -172,14 +173,14 @@ function Resolve-CmdPeekTask {
             usages           = $usages
             usageDetails     = @(ConvertTo-CmdPeekStructuredUsage -Usage $usages)
             packageManager   = $(if ($row -and $row.PSObject.Properties['PackageManager']) { [string]$row.PackageManager } else { $null })
-            onPath           = $(if ($row -and $row.PSObject.Properties['OnPath']) { [bool]$row.OnPath } else { $covered })
-            installed        = [bool]$covered
+            onPath           = $(if ($row -and $row.PSObject.Properties['OnPath']) { [bool]$row.OnPath } else { $false })
+            installed        = [bool]$actuallyInstalled
             installCommands  = @()
         }
-        if ($covered) {
+        if ($actuallyInstalled) {
             $installedHits.Add($item)
         }
-        else {
+        elseif (-not $covered) {
             $item.installCommands = @(Get-CmdPeekInstallCommands -Command $key -Catalog $Catalog -PreferredManager $PreferredManager)
             $missingHits.Add($item)
         }
@@ -361,10 +362,13 @@ function Search-CmdPeekAvailable {
         catch { }
     }
 
-    return [pscustomobject]@{
-        query            = $Query
-        catalogMissing   = @($catalogHits)
-        catalogInstalled = @($resolved.installed)
-        packageManagers  = @($pmHits)
-    }
+    $pmArr = @($pmHits.ToArray())
+    $missingArr = @($catalogHits)
+    $installedArr = @($resolved.installed)
+
+    $out = [pscustomobject]@{ query = [string]$Query }
+    Add-Member -InputObject $out -NotePropertyName catalogMissing -NotePropertyValue $missingArr
+    Add-Member -InputObject $out -NotePropertyName catalogInstalled -NotePropertyValue $installedArr
+    Add-Member -InputObject $out -NotePropertyName packageManagers -NotePropertyValue $pmArr
+    return $out
 }
