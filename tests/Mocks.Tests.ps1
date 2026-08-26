@@ -93,6 +93,7 @@ Describe 'WinGet mock release SHA256' {
         $info = Get-CmdPeekWinGetReleaseInfo -Path $path
         $info | Should -Not -BeNullOrEmpty
         $info.InstallerSha256 | Should -Be 'EFB66D74B23CD2219110F6366E69984EB8E7738F893C90B3F9008CEB1FA1C33E'
+        $info.PayloadSha256 | Should -Be $info.InstallerSha256
         $info.MatchesPayload | Should -BeTrue
         $info.PackageVersion | Should -Be '0.2.0-mock'
     }

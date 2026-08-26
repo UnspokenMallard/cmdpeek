@@ -1,0 +1,7 @@
+# Keep mock installer payload hashing stable across Windows checkouts.
+examples/mocks/winget-portable-payload.txt text eol=lf
+examples/mocks/*.json text eol=lf
+examples/mocks/dpkg-status text eol=lf
+examples/mocks/psreadline-history.txt text eol=lf
+examples/mocks/profile-v1.ps1 text eol=lf
+examples/mocks/pacman/local/**/desc text eol=lf
