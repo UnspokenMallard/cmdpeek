@@ -1,0 +1,16 @@
+%NAME%
+ripgrep
+
+%VERSION%
+14.1.0-1
+
+%BUILDDATE%
+1721606400
+
+%DESC%
+A search tool that combines the usability of ag with the raw speed of grep
+
+%FILES%
+usr/
+usr/bin/
+usr/bin/rg

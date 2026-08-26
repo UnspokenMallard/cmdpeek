@@ -1,11 +1,9 @@
-# WinGet manifest template (0.1.0)
+# WinGet manifest template (0.2.0-mock)
 # Submit the generated multi-file manifests to microsoft/winget-pkgs.
-# This single-file sketch documents the package identity and installer story.
 #
-# PackageIdentifier: cmdpeek.cmdpeek
-# PackageVersion: 0.1.0
-# Publisher: cmdpeek
-# ShortDescription: Recently installed CLI commands and common usages
+# InstallerSha256 is the SHA256 of examples/mocks/winget-portable-payload.txt
+# (see examples/mocks/winget-release.json). Replace both with a real GitHub
+# release ZIP hash before submitting to winget-pkgs.
 #
 # Until a signed GitHub release exists, install with:
 #   irm https://raw.githubusercontent.com/cmdpeek/cmdpeek/main/install.ps1 | iex
@@ -13,7 +11,7 @@
 #   .\install.ps1
 
 PackageIdentifier: cmdpeek.cmdpeek
-PackageVersion: 0.1.0
+PackageVersion: 0.2.0-mock
 PackageLocale: en-US
 Publisher: cmdpeek
 PublisherUrl: https://github.com/cmdpeek/cmdpeek
@@ -22,7 +20,7 @@ Author: cmdpeek contributors
 PackageName: cmdpeek
 License: MIT
 LicenseUrl: https://opensource.org/licenses/MIT
-ShortDescription: Show recently installed CLI commands from Chocolatey, Scoop, and WinGet with common usage examples.
+ShortDescription: Show recently installed CLI commands and match tasks to tools you already have.
 Moniker: cmdpeek
 Tags:
   - cli
@@ -33,8 +31,8 @@ Tags:
 Installers:
   - Architecture: x64
     InstallerType: portable
-    InstallerUrl: https://github.com/cmdpeek/cmdpeek/archive/refs/heads/main.zip
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerUrl: https://github.com/cmdpeek/cmdpeek/releases/download/v0.2.0-mock/cmdpeek-win-x64.zip
+    InstallerSha256: EFB66D74B23CD2219110F6366E69984EB8E7738F893C90B3F9008CEB1FA1C33E
     Commands:
       - cmdpeek
 ManifestType: singleton

@@ -58,7 +58,7 @@ type Snapshot = {
     onPathManager?: string;
     installCommands?: string[];
   }>;
-  rusty?: Array<{ command: string; kind: string; lastLine?: string; packageManager?: string }>;
+  rusty?: Array<{ command: string; kind: string; lastLine?: string; lastUsedAt?: string; packageManager?: string }>;
 };
 
 const here = path.dirname(fileURLToPath(import.meta.url));

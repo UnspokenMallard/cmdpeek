@@ -64,7 +64,7 @@ choco install cmdpeek -s . -y
 
 ### WinGet
 
-The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https://github.com/microsoft/winget-pkgs). Until a release ZIP with a real SHA256 is published, use `install.ps1`.
+The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https://github.com/microsoft/winget-pkgs). `InstallerSha256` currently hashes the mock payload in `examples/mocks/` (see `examples/mocks/README.md`). Until a real GitHub release ZIP is published, use `install.ps1`.
 
 ### First run with no package manager
 
@@ -214,7 +214,7 @@ Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
 State lives in `%LOCALAPPDATA%\cmdpeek\state.json` (favorites, commands hidden from `-n`, preferred package manager, last scan). `state.json` does not include telemetry or example-use counters; those unused fields are ignored if an older file still has them.
 
-Optional AI examples are not called unless you add an API key later (`CMDPEEK_OPENAI_API_KEY` is reserved; unused in 0.2.0). tldr pages are used as an optional local fallback when a command has no catalog examples.
+Optional AI examples: set `CMDPEEK_OPENAI_MOCK_PATH` to a JSON file such as `examples/mocks/openai-examples.json` to attach canned usages. `CMDPEEK_OPENAI_API_KEY` is reserved and does not call the network. tldr pages are used as an optional local fallback when a command has no catalog examples.
 
 ## Shell integration
 

@@ -1,0 +1,6 @@
+# Mock PSReadLine ConsoleHost_history.txt
+# Optional ISO prefix is cmdpeek-only; real PSReadLine files are bare command lines.
+2026-01-04T18:22:00Z yt-dlp -F https://example.com
+2026-03-02T14:11:00Z jq '.' notes.json
+unrelated-shell-noise
+2026-08-20T09:04:11Z fd -e ps1 src

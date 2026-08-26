@@ -1,0 +1,35 @@
+Package: fd-find
+Status: install ok installed
+Priority: optional
+Section: utils
+Installed-Size: 2156
+Maintainer: Mock Maintainer <mock@example.com>
+Architecture: amd64
+Version: 9.0.0-0ubuntu1
+Provides: fd
+Description: Simple, fast and user-friendly alternative to find
+
+Package: linux-image-generic
+Status: install ok installed
+Priority: optional
+Section: kernel
+Version: 6.8.0-31
+Description: Generic Linux kernel image (not a CLI; scanners should still see the package name)
+
+Package: ripgrep
+Status: deinstall ok config-files
+Priority: optional
+Section: utils
+Version: 14.1.0-1
+Description: Recursively searches directories for a regex pattern
+
+Package: jq
+Status: install ok installed
+Priority: optional
+Section: utils
+Installed-Size: 1024
+Maintainer: Mock Maintainer <mock@example.com>
+Architecture: amd64
+Version: 1.7.1-1
+Provides: jq
+Description: Lightweight JSON processor

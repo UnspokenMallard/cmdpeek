@@ -1,0 +1,2 @@
+cmdpeek mock WinGet portable payload (not a real installer).
+Replace this file and winget-release.json after publishing a GitHub release ZIP.

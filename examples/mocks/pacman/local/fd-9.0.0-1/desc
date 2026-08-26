@@ -1,0 +1,16 @@
+%NAME%
+fd
+
+%VERSION%
+9.0.0-1
+
+%BUILDDATE%
+1724198400
+
+%DESC%
+A simple, fast and user-friendly alternative to find
+
+%FILES%
+usr/
+usr/bin/
+usr/bin/fd

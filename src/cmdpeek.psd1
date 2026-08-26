@@ -47,6 +47,10 @@
         'Format-CmdPeekTaskOutput'
         'Format-CmdPeekWhyOutput'
         'Format-CmdPeekHaveOutput'
+        'Get-CmdPeekAptPackage'
+        'Get-CmdPeekPacmanPackage'
+        'Get-CmdPeekWinGetReleaseInfo'
+        'Get-CmdPeekMockAiExample'
         'Format-CmdPeekGapOutput'
     )
     CmdletsToExport   = @()

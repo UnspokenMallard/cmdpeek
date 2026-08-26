@@ -60,7 +60,9 @@ function Invoke-CmdPeek {
         [string]$PipxRoot,
         [string]$NpmRoot,
         [string]$CargoRoot,
-        [string]$BrewRoot
+        [string]$BrewRoot,
+        [string]$AptStatusPath,
+        [string]$PacmanRoot
     )
 
     if ($Recent) {
@@ -186,6 +188,8 @@ function Invoke-CmdPeek {
             -NpmRoot $NpmRoot `
             -CargoRoot $CargoRoot `
             -BrewRoot $BrewRoot `
+            -AptStatusPath $AptStatusPath `
+            -PacmanRoot $PacmanRoot `
             -EnabledManagers $managerNames `
             -CommandTester $CommandTester)
 
@@ -596,5 +600,9 @@ Export-ModuleMember -Function @(
     'Format-CmdPeekTaskOutput'
     'Format-CmdPeekWhyOutput'
     'Format-CmdPeekHaveOutput'
+    'Get-CmdPeekAptPackage'
+    'Get-CmdPeekPacmanPackage'
+    'Get-CmdPeekWinGetReleaseInfo'
+    'Get-CmdPeekMockAiExample'
     'Format-CmdPeekGapOutput'
 )
