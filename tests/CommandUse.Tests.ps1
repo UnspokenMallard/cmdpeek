@@ -50,8 +50,10 @@ Describe 'Get-CmdPeekRusty' {
         $null = @(Get-CmdPeekRusty -History $inv -HistoryPath @($path) -RecentLines 1 -LastUsedPath $sidecar -PersistLastUsed)
         Test-Path -LiteralPath $sidecar | Should -BeTrue
         $raw = Get-Content -LiteralPath $sidecar -Raw -Encoding UTF8 | ConvertFrom-Json
-        $raw.commands.jq.lastUsedAt | Should -Match '2026-03-02'
-        $raw.commands.jq.lastLine | Should -Match 'jq'
+        ([datetime]$raw.commands.jq.lastUsedAt).Year | Should -Be 2026
+        ([datetime]$raw.commands.jq.lastUsedAt).Month | Should -Be 3
+        ([datetime]$raw.commands.jq.lastUsedAt).Day | Should -Be 2
+        [string]$raw.commands.jq.lastLine | Should -Match 'jq'
         $sidecar | Should -Not -Match 'examples'
     }
 
