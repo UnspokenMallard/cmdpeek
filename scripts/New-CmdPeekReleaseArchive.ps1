@@ -54,6 +54,12 @@ try {
         }
     }
 
+    Get-ChildItem -LiteralPath $stage -Recurse -Force | ForEach-Object {
+        if ($_.LastWriteTime.Year -lt 1980) {
+            $_.LastWriteTime = [datetime]'2020-01-01T00:00:00Z'
+        }
+    }
+
     $zipName = 'cmdpeek-win-x64-v' + $Version + '.zip'
     $zipPath = Join-Path $OutputDirectory $zipName
     if (Test-Path -LiteralPath $zipPath) {
