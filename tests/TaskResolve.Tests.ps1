@@ -46,7 +46,9 @@ Describe 'Resolve-CmdPeekTask' {
         $result = Resolve-CmdPeekTask -Task 'pretty-print json' -History $script:history -Catalog $script:catalog
         @($result.installed).Count | Should -BeGreaterThan 0
         @($result.installed | ForEach-Object { $_.command }) | Should -Contain 'jq'
+        @($result.installed | ForEach-Object { $_.command }) | Should -Not -Contain 'fx'
         @($result.missing | ForEach-Object { $_.command }) | Should -Not -Contain 'jq'
+        @($result.missing | ForEach-Object { $_.command }) | Should -Not -Contain 'fx'
     }
 
     It 'scores an exact capability' {
@@ -103,5 +105,27 @@ Describe 'task formatters' {
         $text = Format-CmdPeekTaskOutput -Result $result
         $text | Should -Match 'You already have'
         $text | Should -Match 'jq'
+    }
+}
+
+Describe 'Search-CmdPeekAvailable' {
+    It 'splits installed catalog hits from missing ones' {
+        $catalog = @{
+            'jq' = [pscustomobject]@{
+                category     = 'dev-tools'
+                capabilities = @('json')
+                usages       = @("jq '.' file.json")
+            }
+            'fx' = [pscustomobject]@{
+                category     = 'dev-tools'
+                capabilities = @('json')
+                usages       = @('fx file.json')
+            }
+        }
+        $history = @([pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop' })
+        $result = Search-CmdPeekAvailable -Query json -History $history -Catalog $catalog
+        @($result.catalogInstalled | ForEach-Object { $_.command }) | Should -Contain 'jq'
+        @($result.catalogMissing | ForEach-Object { $_.command }) | Should -Contain 'fx'
+        @($result.catalogMissing | ForEach-Object { $_.command }) | Should -Not -Contain 'jq'
     }
 }
