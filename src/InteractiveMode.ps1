@@ -101,6 +101,15 @@ function Format-CmdPeekQuickOutput {
             if ($missing.Count -gt 0) {
                 $lines.Add(('   gaps: {0}' -f ($missing -join ', ')))
             }
+            if ($row.PSObject.Properties['Version'] -and $row.Version) {
+                $lines.Add(('   version: {0}' -f $row.Version))
+            }
+            if ($row.PSObject.Properties['SubstitutesInstalled'] -and $row.SubstitutesInstalled -and @($row.SubstitutesInstalled).Count -gt 0) {
+                $lines.Add(('   you already have: {0}' -f ((@($row.SubstitutesInstalled) -join ', '))))
+            }
+            if ($row.PSObject.Properties['InstallCommands'] -and $row.InstallCommands -and @($row.InstallCommands).Count -gt 0) {
+                $lines.Add(('   install: {0}' -f @($row.InstallCommands)[0]))
+            }
         }
         elseif (-not $Rusty -and $row.PSObject.Properties['Related'] -and $row.Related -and @($row.Related).Count -gt 0) {
             $lines.Add(('   suggestions: {0}' -f ((@($row.Related) | Select-Object -First 3) -join ', ')))
@@ -110,6 +119,187 @@ function Format-CmdPeekQuickOutput {
     }
 
     return ($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine
+}
+
+function Format-CmdPeekTaskOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(('Task: {0}' -f $Result.query))
+    $lines.Add('')
+    $installed = @($Result.installed)
+    if ($installed.Count -gt 0) {
+        $lines.Add('You already have:')
+        foreach ($hit in $installed) {
+            $pm = $(if ($hit.packageManager) { $hit.packageManager } else { 'path' })
+            $lines.Add(('  {0} ({1})  {2}' -f $hit.command, $pm, $hit.reason))
+            foreach ($u in @($hit.usages | Select-Object -First 2)) {
+                $lines.Add(('    -  {0}' -f $u))
+            }
+        }
+        $lines.Add('')
+    }
+    $missing = @($Result.missing)
+    if ($missing.Count -gt 0) {
+        $header = $(if ($installed.Count -gt 0) { 'Also in the catalog (not installed):' } else { 'Catalog matches to install:' })
+        $lines.Add($header)
+        foreach ($hit in $missing) {
+            $lines.Add(('  {0}  {1}' -f $hit.command, $hit.reason))
+            $install = @($hit.installCommands)
+            if ($install.Count -gt 0) {
+                $lines.Add(('    install: {0}' -f $install[0]))
+            }
+            foreach ($u in @($hit.usages | Select-Object -First 1)) {
+                $lines.Add(('    -  {0}' -f $u))
+            }
+        }
+        $lines.Add('')
+    }
+    if ($installed.Count -eq 0 -and $missing.Count -eq 0) {
+        $lines.Add('No catalog matches for that task.')
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Format-CmdPeekWhyOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $title = '{0}' -f $Result.command
+    if ($Result.installed) { $title += '  installed' } else { $title += '  not installed' }
+    if ($Result.onPath) { $title += '  on PATH' }
+    if ($Result.onPathManager) { $title += (' via {0}' -f $Result.onPathManager) }
+    $lines.Add($title)
+    if ($Result.category) { $lines.Add(('  category: {0}' -f $Result.category)) }
+    if (@($Result.capabilities).Count -gt 0) { $lines.Add(('  capabilities: {0}' -f ($Result.capabilities -join ', '))) }
+    if (@($Result.aliases).Count -gt 0) { $lines.Add(('  aliases: {0}' -f ($Result.aliases -join ', '))) }
+    if (@($Result.packageManagers).Count -gt 1) {
+        $lines.Add(('  managers: {0}' -f ($Result.packageManagers -join ', ')))
+    }
+    if (@($Result.substitutesInstalled).Count -gt 0) {
+        $lines.Add(('  you already have: {0}' -f ($Result.substitutesInstalled -join ', ')))
+    }
+    if (@($Result.substitutesMissing).Count -gt 0) {
+        $lines.Add(('  alternatives: {0}' -f ($Result.substitutesMissing -join ', ')))
+    }
+    foreach ($u in @($Result.usages | Select-Object -First 5)) {
+        $lines.Add(('   -  {0}' -f $u))
+    }
+    if (-not $Result.installed -and @($Result.installCommands).Count -gt 0) {
+        $lines.Add(('  install: {0}' -f @($Result.installCommands)[0]))
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Format-CmdPeekHaveOutput {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$History
+    )
+
+    $items = @($History)
+    if ($items.Count -eq 0) {
+        return "No installed catalog tools match.`n"
+    }
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('Installed tools you can use:')
+    $lines.Add('')
+    $currentCat = ''
+    foreach ($row in $items) {
+        $cat = $(if ($row.PSObject.Properties['Category'] -and $row.Category) { [string]$row.Category } else { 'other' })
+        if ($cat -ne $currentCat) {
+            $currentCat = $cat
+            $lines.Add(('[{0}]' -f $cat))
+        }
+        $caps = ''
+        if ($row.PSObject.Properties['Capabilities'] -and $row.Capabilities) {
+            $caps = '  ' + ((@($row.Capabilities) -join ', '))
+        }
+        $lines.Add(('  {0} ({1}){2}' -f $row.Command, $row.PackageManager, $caps))
+        foreach ($u in @($row.Usages | Select-Object -First 1)) {
+            $lines.Add(('    -  {0}' -f $u))
+        }
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Format-CmdPeekGapOutput {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$Gap
+    )
+
+    $items = @($Gap)
+    if ($items.Count -eq 0) {
+        return "No gaps.`n"
+    }
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('Inventory gaps:')
+    $lines.Add('')
+    foreach ($g in $items) {
+        $install = ''
+        if ($g.PSObject.Properties['installCommands'] -and $g.installCommands -and @($g.installCommands).Count -gt 0) {
+            $install = ('  {0}' -f @($g.installCommands)[0])
+        }
+        $lines.Add(('  [{0}] {1}  {2}{3}' -f $g.kind, $g.command, $g.reason, $install))
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Format-CmdPeekAvailableOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(('Search: {0}' -f $Result.query))
+    $lines.Add('')
+    $have = @($Result.catalogInstalled)
+    if ($have.Count -gt 0) {
+        $lines.Add('Already installed:')
+        foreach ($hit in $have) {
+            $pm = $(if ($hit.packageManager) { $hit.packageManager } else { 'path' })
+            $lines.Add(('  {0} ({1})' -f $hit.command, $pm))
+        }
+        $lines.Add('')
+    }
+    $miss = @($Result.catalogMissing)
+    if ($miss.Count -gt 0) {
+        $lines.Add('Not installed (catalog):')
+        foreach ($hit in $miss) {
+            $line = '  {0}' -f $hit.command
+            if ($hit.installCommands -and @($hit.installCommands).Count -gt 0) {
+                $line += ('  -> {0}' -f @($hit.installCommands)[0])
+            }
+            $lines.Add($line)
+        }
+        $lines.Add('')
+    }
+    $pm = @($Result.packageManagers)
+    if ($pm.Count -gt 0) {
+        $lines.Add('Package manager hits:')
+        foreach ($hit in $pm) {
+            $name = $(if ($hit.PSObject.Properties['name']) { $hit.name } else { [string]$hit })
+            $mgr = $(if ($hit.PSObject.Properties['manager']) { $hit.manager } else { '' })
+            $lines.Add(('  {0} {1}' -f $name, $mgr))
+        }
+    }
+    if ($have.Count -eq 0 -and $miss.Count -eq 0 -and $pm.Count -eq 0) {
+        $lines.Add('No matches.')
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 }
 
 function Copy-CmdPeekText {
@@ -392,7 +582,7 @@ function Install-CmdPeekTrackedPackage {
         [Parameter(Mandatory)]
         [string]$PackageName,
         [Parameter(Mandatory)]
-        [ValidateSet('chocolatey', 'scoop', 'winget')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
         [string]$PackageManager
     )
 
@@ -400,6 +590,10 @@ function Install-CmdPeekTrackedPackage {
         'scoop' { "scoop install $PackageName" }
         'chocolatey' { "choco install $PackageName -y" }
         'winget' { "winget install --id $PackageName -e --accept-package-agreements --accept-source-agreements" }
+        'pipx' { "pipx install $PackageName" }
+        'npm' { "npm install -g $PackageName" }
+        'cargo' { "cargo install $PackageName" }
+        'brew' { "brew install $PackageName" }
     }
 
     if ($PSCmdlet.ShouldProcess($PackageName, $cmdline)) {
@@ -427,7 +621,7 @@ function Confirm-CmdPeekMissingCommand {
 
     $available = @($Managers | Where-Object { $_.Present } | Select-Object -ExpandProperty Name)
     if ($available.Count -eq 0) {
-        $available = @('scoop', 'chocolatey', 'winget')
+        $available = @('scoop', 'chocolatey', 'winget', 'pipx', 'npm', 'cargo', 'brew')
     }
 
     foreach ($row in $rows) {
@@ -470,7 +664,8 @@ function Show-CmdPeekNoManagerPrompt {
     )
 
     $all = @(Get-CmdPeekPackageManager -All)
-    Write-Host 'No package managers found (Chocolatey, Scoop, or WinGet).' -ForegroundColor Yellow
+    Write-Host 'No Chocolatey, Scoop, or WinGet on PATH.' -ForegroundColor Yellow
+    Write-Host 'cmdpeek still inventories pipx/npm/cargo/brew when present, plus catalog names already on PATH.' -ForegroundColor DarkGray
     Write-Host ''
     $i = 1
     foreach ($pm in $all) {
@@ -481,16 +676,23 @@ function Show-CmdPeekNoManagerPrompt {
 
     if ($NonInteractive) {
         Write-Host ''
-        Write-Host 'Install one of the managers above, then re-run cmdpeek.'
+        Write-Host 'Install a manager for package recency, or keep using PATH-only discovery.'
         return
     }
 
     Write-Host ''
-    $choice = Read-Host 'Install which manager? [1/2/3/n]'
+    Write-Host 'Press Enter to continue with PATH-only discovery, or pick a manager to bootstrap.'
+    $choice = Read-Host ('Install which manager? [1-{0}/n]' -f $all.Count)
     $idx = 0
     if ([int]::TryParse($choice, [ref]$idx) -and $idx -ge 1 -and $idx -le $all.Count) {
         $hint = $all[$idx - 1].InstallHint
         Write-Host "Running bootstrap for $($all[$idx - 1].Name)..." -ForegroundColor Cyan
-        cmd.exe /c $hint
+        $comSpec = [string]$env:ComSpec
+        if (-not [string]::IsNullOrWhiteSpace($comSpec) -and (Test-Path -LiteralPath $comSpec)) {
+            & $comSpec /c $hint
+        }
+        else {
+            Write-Host $hint
+        }
     }
 }

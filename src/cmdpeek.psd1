@@ -1,11 +1,11 @@
 @{
     RootModule        = 'cmdpeek.psm1'
-    ModuleVersion     = '0.1.0'
+    ModuleVersion     = '0.2.0'
     GUID              = '8f3c2a91-4e6b-4d7a-9c1e-2b8f6a0d5e31'
     Author            = 'cmdpeek contributors'
     CompanyName       = 'cmdpeek'
     Copyright         = '(c) cmdpeek contributors. MIT License.'
-    Description       = 'Show the most recently installed CLI commands from Chocolatey, Scoop, and WinGet, with common usage examples.'
+    Description       = 'Show recently installed CLI commands and match tasks to tools you already have.'
     PowerShellVersion = '5.1'
     FunctionsToExport = @(
         'Get-CmdPeekPackageManager'
@@ -36,16 +36,28 @@
         'Convert-CmdPeekSince'
         'Select-CmdPeekJustInstalled'
         'Get-CmdPeekRusty'
+        'Resolve-CmdPeekTask'
+        'Get-CmdPeekWhyCommand'
+        'Get-CmdPeekHaveList'
+        'Search-CmdPeekAvailable'
+        'Test-CmdPeekCatalog'
+        'Get-CmdPeekLastInstall'
+        'Get-CmdPeekInstallCommands'
+        'Add-CmdPeekPathCommands'
+        'Format-CmdPeekTaskOutput'
+        'Format-CmdPeekWhyOutput'
+        'Format-CmdPeekHaveOutput'
+        'Format-CmdPeekGapOutput'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
     AliasesToExport   = @()
     PrivateData       = @{
         PSData = @{
-            Tags         = @('windows', 'cli', 'scoop', 'chocolatey', 'winget', 'packages')
+            Tags         = @('windows', 'cli', 'scoop', 'chocolatey', 'winget', 'pipx', 'mcp', 'packages')
             LicenseUri   = 'https://opensource.org/licenses/MIT'
             ProjectUri   = 'https://github.com/cmdpeek/cmdpeek'
-            ReleaseNotes = 'Initial public release.'
+            ReleaseNotes = '0.2.0: task resolver (prefer installed), extra scanners, catalog overlay, MCP prompts/resources.'
         }
     }
 }

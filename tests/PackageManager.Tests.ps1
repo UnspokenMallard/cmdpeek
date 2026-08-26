@@ -24,9 +24,12 @@ Describe 'Get-CmdPeekPackageManager' {
         $result.Name | Should -Contain 'winget'
     }
 
-    It 'returns all three when every command is present' {
+    It 'returns chocolatey, scoop, and winget when every command is present' {
         $result = @(Get-CmdPeekPackageManager -CommandTester { $true })
-        $result.Name | Should -Be @('chocolatey', 'scoop', 'winget')
+        $result.Name | Should -Contain 'chocolatey'
+        $result.Name | Should -Contain 'scoop'
+        $result.Name | Should -Contain 'winget'
+        $result.Count | Should -BeGreaterThan 2
     }
 
     It 'returns empty when no package manager is present' {
@@ -100,6 +103,21 @@ Describe 'Get-CmdPeekInstalledPackage' {
         $result[0].InstallDate | Should -Be ([datetime]'2025-08-18T09:00:00')
     }
 
+    It 'matches chocolatey shims from binaries inside the package folder' {
+        $lib = Join-Path $script:chocoRoot 'lib\ripgrep'
+        $bin = Join-Path $script:chocoRoot 'bin'
+        $tools = Join-Path $lib 'tools'
+        New-Item -ItemType Directory -Force -Path $tools, $bin | Out-Null
+        '<package><metadata><id>ripgrep</id><version>14.1.0</version></metadata></package>' |
+            Set-Content -Path (Join-Path $lib 'ripgrep.nuspec') -Encoding UTF8
+        New-Item -ItemType File -Force -Path (Join-Path $tools 'rg.exe') | Out-Null
+        New-Item -ItemType File -Force -Path (Join-Path $bin 'rg.exe') | Out-Null
+
+        $result = @(Get-CmdPeekInstalledPackage -ChocolateyRoot $script:chocoRoot -EnabledManagers @('chocolatey'))
+        $result.Count | Should -Be 1
+        $result[0].Commands | Should -Contain 'rg'
+    }
+
     It 'skips chocolatey meta packages that do not expose commands' {
         $lib = Join-Path $script:chocoRoot 'lib\chocolatey'
         New-Item -ItemType Directory -Force -Path $lib | Out-Null
@@ -128,8 +146,11 @@ Describe 'Get-CmdPeekInstalledPackage' {
     }
 
     It 'keeps a WinGet console CLI that the command tester can resolve' {
-        $cmd = $env:ComSpec
-        if (-not (Test-Path -LiteralPath $cmd)) { return }
+        $cmd = [string]$env:ComSpec
+        if ([string]::IsNullOrWhiteSpace($cmd) -or -not (Test-Path -LiteralPath $cmd)) {
+            Set-ItResult -Skipped -Because 'cmd.exe is not available on this OS'
+            return
+        }
         $pkg = Join-Path $script:wingetRoot 'Acme.MyTool_8wekyb3d8bbwe'
         New-Item -ItemType Directory -Force -Path $pkg | Out-Null
         Copy-Item -LiteralPath $cmd -Destination (Join-Path $pkg 'mytool.exe')
@@ -143,8 +164,16 @@ Describe 'Get-CmdPeekInstalledPackage' {
     }
 
     It 'skips WinGet GUI executables even when the command tester accepts them' {
-        $notepad = Join-Path $env:SystemRoot 'System32\notepad.exe'
-        if (-not (Test-Path -LiteralPath $notepad)) { return }
+        $systemRoot = [string]$env:SystemRoot
+        if ([string]::IsNullOrWhiteSpace($systemRoot)) {
+            Set-ItResult -Skipped -Because 'SystemRoot is not set on this OS'
+            return
+        }
+        $notepad = Join-Path $systemRoot 'System32\notepad.exe'
+        if (-not (Test-Path -LiteralPath $notepad)) {
+            Set-ItResult -Skipped -Because 'notepad.exe is not available on this OS'
+            return
+        }
         $pkg = Join-Path $script:wingetRoot 'LogExpert.LogExpert_8wekyb3d8bbwe'
         New-Item -ItemType Directory -Force -Path $pkg | Out-Null
         Copy-Item -LiteralPath $notepad -Destination (Join-Path $pkg 'LogExpert.exe')
@@ -193,6 +222,22 @@ Describe 'Get-CmdPeekInstalledPackage' {
     It 'returns empty when enabled managers have no packages' {
         $result = @(Get-CmdPeekInstalledPackage -ScoopRoot $script:scoopRoot -EnabledManagers @('scoop'))
         $result.Count | Should -Be 0
+    }
+}
+
+Describe 'Get-CmdPeekDefaultInstallRoot' {
+    It 'returns a winget path when LOCALAPPDATA is unset' {
+        $had = Test-Path Env:LOCALAPPDATA
+        $prev = $env:LOCALAPPDATA
+        try {
+            if ($had) { Remove-Item Env:LOCALAPPDATA }
+            $root = Get-CmdPeekDefaultInstallRoot -Manager winget
+            $root | Should -Not -BeNullOrEmpty
+            $root | Should -Match 'WinGet'
+        }
+        finally {
+            if ($had) { $env:LOCALAPPDATA = $prev }
+        }
     }
 }
 

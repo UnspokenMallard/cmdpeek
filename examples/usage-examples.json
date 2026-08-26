@@ -1,305 +1,1955 @@
 {
+  "$schema": "./usage-examples.schema.json",
   "commands": {
     "yt-dlp": {
       "category": "media",
-      "related": ["ffmpeg", "gallery-dl"],
       "usages": [
         "yt-dlp <URL>                    # Download video",
         "yt-dlp -f bestaudio <URL>       # Extract audio only",
         "yt-dlp --playlist-start 1 --playlist-end 10 <URL>  # Download playlist range",
         "yt-dlp -x --audio-format mp3 <URL>  # Convert to MP3"
-      ]
+      ],
+      "related": [
+        "ffmpeg",
+        "gallery-dl"
+      ],
+      "capabilities": [
+        "video",
+        "download",
+        "media"
+      ],
+      "tasks": [
+        "download video",
+        "download youtube",
+        "extract audio",
+        "download playlist"
+      ],
+      "substitutes": [
+        "gallery-dl"
+      ],
+      "install": {
+        "scoop": "yt-dlp",
+        "chocolatey": "yt-dlp",
+        "winget": "yt-dlp.yt-dlp",
+        "brew": "yt-dlp",
+        "apt": "yt-dlp",
+        "pipx": "yt-dlp"
+      }
     },
     "ffmpeg": {
       "category": "media",
-      "related": ["yt-dlp", "mpv"],
       "usages": [
         "ffmpeg -i input.mp4 output.mp3  # Convert video to audio",
         "ffmpeg -i in.mp4 -ss 00:00:10 -to 00:00:20 -c copy cut.mp4  # Cut clip",
         "ffmpeg -i in.mp4 -vf scale=1280:-1 out.mp4  # Resize video"
-      ]
+      ],
+      "related": [
+        "yt-dlp",
+        "mpv"
+      ],
+      "capabilities": [
+        "video",
+        "audio",
+        "convert",
+        "media"
+      ],
+      "tasks": [
+        "convert video",
+        "cut video",
+        "resize video",
+        "extract audio from video"
+      ],
+      "install": {
+        "scoop": "ffmpeg",
+        "chocolatey": "ffmpeg",
+        "winget": "Gyan.FFmpeg",
+        "brew": "ffmpeg",
+        "apt": "ffmpeg"
+      }
     },
     "mpv": {
       "category": "media",
-      "related": ["ffmpeg", "yt-dlp"],
       "usages": [
         "mpv <file>                      # Play media",
         "mpv --no-video <file>           # Audio only"
-      ]
+      ],
+      "related": [
+        "ffmpeg",
+        "yt-dlp"
+      ],
+      "capabilities": [
+        "video",
+        "audio",
+        "player",
+        "media"
+      ],
+      "tasks": [
+        "play video",
+        "play audio"
+      ],
+      "install": {
+        "scoop": "mpv",
+        "chocolatey": "mpv",
+        "winget": "mpv.net",
+        "brew": "mpv",
+        "apt": "mpv"
+      }
+    },
+    "gallery-dl": {
+      "category": "media",
+      "usages": [
+        "gallery-dl <URL>                # Download gallery",
+        "gallery-dl -g <URL>             # Print URLs only"
+      ],
+      "related": [
+        "yt-dlp",
+        "ffmpeg"
+      ],
+      "capabilities": [
+        "download",
+        "media",
+        "images"
+      ],
+      "tasks": [
+        "download gallery",
+        "download images"
+      ],
+      "substitutes": [
+        "yt-dlp"
+      ],
+      "install": {
+        "scoop": "gallery-dl",
+        "chocolatey": "gallery-dl",
+        "brew": "gallery-dl"
+      }
     },
     "fd": {
       "category": "dev-tools",
-      "related": ["rg", "fzf"],
       "usages": [
         "fd <pattern>                    # Find files",
         "fd -t f <pattern>               # Find files only",
         "fd -e ps1 <pattern>             # Find by extension",
         "fd -H <pattern>                 # Include hidden files"
-      ]
+      ],
+      "related": [
+        "rg",
+        "fzf"
+      ],
+      "aliases": [
+        "fdfind"
+      ],
+      "capabilities": [
+        "search",
+        "find",
+        "files"
+      ],
+      "tasks": [
+        "find files",
+        "search filenames",
+        "locate files"
+      ],
+      "substitutes": [
+        "find"
+      ],
+      "install": {
+        "scoop": "fd",
+        "chocolatey": "fd",
+        "winget": "sharkdp.fd",
+        "brew": "fd",
+        "apt": "fd-find"
+      }
     },
     "rg": {
       "category": "dev-tools",
-      "related": ["fd", "fzf"],
       "usages": [
         "rg <pattern>                    # Search recursively",
         "rg -i <pattern>                 # Case-insensitive search",
         "rg -t ps1 <pattern>             # Search PowerShell files",
         "rg -l <pattern>                 # List matching files only"
-      ]
+      ],
+      "related": [
+        "fd",
+        "fzf"
+      ],
+      "aliases": [
+        "ripgrep"
+      ],
+      "capabilities": [
+        "search",
+        "grep"
+      ],
+      "tasks": [
+        "search files",
+        "find in files",
+        "grep recursively",
+        "search code"
+      ],
+      "substitutes": [
+        "grep",
+        "findstr"
+      ],
+      "install": {
+        "scoop": "ripgrep",
+        "chocolatey": "ripgrep",
+        "winget": "BurntSushi.ripgrep.MSVC",
+        "brew": "ripgrep",
+        "apt": "ripgrep"
+      }
     },
     "ripgrep": {
       "category": "dev-tools",
-      "related": ["fd", "fzf"],
       "usages": [
         "rg <pattern>                    # Search recursively",
         "rg -i <pattern>                 # Case-insensitive search"
+      ],
+      "related": [
+        "fd",
+        "fzf"
+      ],
+      "aliases": [
+        "rg"
+      ],
+      "capabilities": [
+        "search",
+        "grep"
+      ],
+      "tasks": [
+        "search files",
+        "find in files",
+        "grep recursively"
+      ],
+      "substitutes": [
+        "grep",
+        "findstr"
+      ],
+      "install": {
+        "scoop": "ripgrep",
+        "chocolatey": "ripgrep",
+        "winget": "BurntSushi.ripgrep.MSVC",
+        "brew": "ripgrep",
+        "apt": "ripgrep"
+      }
+    },
+    "grep": {
+      "category": "dev-tools",
+      "usages": [
+        "grep -R <pattern> .             # Recursive search",
+        "grep -i <pattern> file          # Case-insensitive search"
+      ],
+      "related": [
+        "rg"
+      ],
+      "capabilities": [
+        "search",
+        "grep"
+      ],
+      "tasks": [
+        "search files",
+        "grep"
+      ],
+      "substitutes": [
+        "rg",
+        "findstr"
+      ],
+      "install": {
+        "scoop": "grep",
+        "chocolatey": "grep",
+        "brew": "grep",
+        "apt": "grep"
+      }
+    },
+    "findstr": {
+      "category": "system",
+      "usages": [
+        "findstr /s /i <pattern> *       # Recursive case-insensitive search",
+        "findstr /n <pattern> file.txt   # Show line numbers"
+      ],
+      "related": [
+        "rg"
+      ],
+      "capabilities": [
+        "search",
+        "grep"
+      ],
+      "tasks": [
+        "search files",
+        "find in files"
+      ],
+      "substitutes": [
+        "rg",
+        "grep"
       ]
     },
     "jq": {
       "category": "dev-tools",
-      "related": ["fx", "yq"],
       "usages": [
         "jq '.field' file.json           # Extract field",
         "jq 'map(.name)' file.json       # Transform array",
         "jq -r '.[] | .name' file.json   # Raw strings from array",
         "jq '.' file.json                # Pretty-print JSON"
-      ]
+      ],
+      "related": [
+        "fx",
+        "yq"
+      ],
+      "capabilities": [
+        "json",
+        "query"
+      ],
+      "tasks": [
+        "pretty-print json",
+        "query json",
+        "extract json field",
+        "transform json"
+      ],
+      "substitutes": [
+        "fx"
+      ],
+      "install": {
+        "scoop": "jq",
+        "chocolatey": "jq",
+        "winget": "jqlang.jq",
+        "brew": "jq",
+        "apt": "jq"
+      }
     },
     "yq": {
       "category": "dev-tools",
-      "related": ["jq"],
       "usages": [
         "yq '.field' file.yaml           # Extract field",
         "yq -o json file.yaml            # Convert YAML to JSON"
-      ]
+      ],
+      "related": [
+        "jq"
+      ],
+      "capabilities": [
+        "yaml",
+        "json",
+        "query"
+      ],
+      "tasks": [
+        "query yaml",
+        "convert yaml to json",
+        "pretty-print yaml"
+      ],
+      "substitutes": [
+        "jq"
+      ],
+      "install": {
+        "scoop": "yq",
+        "chocolatey": "yq",
+        "winget": "MikeFarah.yq",
+        "brew": "yq",
+        "apt": "yq"
+      }
+    },
+    "fx": {
+      "category": "dev-tools",
+      "usages": [
+        "fx file.json                    # Interactive JSON viewer",
+        "fx file.json .field             # Extract field"
+      ],
+      "related": [
+        "jq"
+      ],
+      "capabilities": [
+        "json",
+        "query"
+      ],
+      "tasks": [
+        "pretty-print json",
+        "query json",
+        "view json"
+      ],
+      "substitutes": [
+        "jq"
+      ],
+      "install": {
+        "scoop": "fx",
+        "chocolatey": "fx",
+        "brew": "fx"
+      }
     },
     "git": {
       "category": "dev-tools",
-      "related": ["gh", "lazygit", "delta", "tig"],
       "usages": [
         "git status                      # Show working tree",
         "git log --oneline -n 20         # Compact history",
         "git diff                        # Show unstaged changes",
         "git switch -c <branch>          # Create and switch branch"
-      ]
+      ],
+      "related": [
+        "gh",
+        "lazygit",
+        "delta",
+        "tig"
+      ],
+      "capabilities": [
+        "git",
+        "vcs"
+      ],
+      "tasks": [
+        "git status",
+        "view git log",
+        "create branch",
+        "show diff"
+      ],
+      "install": {
+        "scoop": "git",
+        "chocolatey": "git",
+        "winget": "Git.Git",
+        "brew": "git",
+        "apt": "git"
+      }
     },
     "gh": {
       "category": "dev-tools",
-      "related": ["git", "lazygit"],
       "usages": [
         "gh repo view                    # Show current repo",
         "gh pr create                    # Open a pull request",
         "gh issue list                   # List issues"
-      ]
+      ],
+      "related": [
+        "git",
+        "lazygit"
+      ],
+      "capabilities": [
+        "git",
+        "github"
+      ],
+      "tasks": [
+        "create pull request",
+        "list github issues",
+        "view github repo"
+      ],
+      "install": {
+        "scoop": "gh",
+        "chocolatey": "gh",
+        "winget": "GitHub.cli",
+        "brew": "gh",
+        "apt": "gh"
+      }
+    },
+    "delta": {
+      "category": "dev-tools",
+      "usages": [
+        "git diff | delta                # Highlighted git diff",
+        "delta file.old file.new         # Compare two files"
+      ],
+      "related": [
+        "git",
+        "bat"
+      ],
+      "capabilities": [
+        "git",
+        "diff"
+      ],
+      "tasks": [
+        "pretty git diff",
+        "compare files"
+      ],
+      "install": {
+        "scoop": "delta",
+        "chocolatey": "delta",
+        "winget": "dandavison.delta",
+        "brew": "git-delta",
+        "apt": "git-delta"
+      }
+    },
+    "lazygit": {
+      "category": "dev-tools",
+      "usages": [
+        "lazygit                         # Open git TUI",
+        "lazygit -p <path>               # Open repo at path"
+      ],
+      "related": [
+        "git",
+        "gh",
+        "tig"
+      ],
+      "capabilities": [
+        "git",
+        "tui"
+      ],
+      "tasks": [
+        "git tui",
+        "interactive git"
+      ],
+      "substitutes": [
+        "tig"
+      ],
+      "install": {
+        "scoop": "lazygit",
+        "chocolatey": "lazygit",
+        "winget": "JesseDuffield.lazygit",
+        "brew": "lazygit"
+      }
+    },
+    "tig": {
+      "category": "dev-tools",
+      "usages": [
+        "tig                             # Browse git history",
+        "tig status                      # Status view"
+      ],
+      "related": [
+        "git",
+        "lazygit"
+      ],
+      "capabilities": [
+        "git",
+        "tui"
+      ],
+      "tasks": [
+        "git tui",
+        "browse git history"
+      ],
+      "substitutes": [
+        "lazygit"
+      ],
+      "install": {
+        "scoop": "tig",
+        "chocolatey": "tig",
+        "brew": "tig",
+        "apt": "tig"
+      }
     },
     "httpie": {
       "category": "network",
-      "related": ["curl", "wget"],
       "usages": [
         "http GET https://api.example.com/v1/health  # GET request",
         "http POST https://api.example.com name=cmdpeek  # Form POST",
         "https :/foo                     # Host from env, HTTPS"
-      ]
+      ],
+      "related": [
+        "curl",
+        "wget"
+      ],
+      "aliases": [
+        "http"
+      ],
+      "capabilities": [
+        "http",
+        "api"
+      ],
+      "tasks": [
+        "http get",
+        "http post",
+        "call rest api"
+      ],
+      "substitutes": [
+        "curl",
+        "wget"
+      ],
+      "install": {
+        "scoop": "httpie",
+        "chocolatey": "httpie",
+        "winget": "httpie.httpie",
+        "brew": "httpie",
+        "apt": "httpie",
+        "pipx": "httpie"
+      }
     },
     "http": {
       "category": "network",
-      "related": ["curl", "wget"],
       "usages": [
         "http GET https://example.com    # GET request",
         "http POST :8080/api id:=1       # JSON POST to localhost"
-      ]
+      ],
+      "related": [
+        "curl",
+        "wget"
+      ],
+      "aliases": [
+        "httpie"
+      ],
+      "capabilities": [
+        "http",
+        "api"
+      ],
+      "tasks": [
+        "http get",
+        "http post",
+        "call rest api"
+      ],
+      "substitutes": [
+        "curl",
+        "wget"
+      ],
+      "install": {
+        "scoop": "httpie",
+        "chocolatey": "httpie",
+        "winget": "httpie.httpie",
+        "brew": "httpie",
+        "apt": "httpie",
+        "pipx": "httpie"
+      }
     },
     "curl": {
       "category": "network",
-      "related": ["httpie", "wget"],
       "usages": [
         "curl https://example.com        # Fetch URL",
         "curl -I https://example.com     # Headers only",
         "curl -O https://example.com/file.zip  # Download to file"
-      ]
+      ],
+      "related": [
+        "httpie",
+        "wget"
+      ],
+      "capabilities": [
+        "http",
+        "download"
+      ],
+      "tasks": [
+        "http get",
+        "download file",
+        "fetch url"
+      ],
+      "substitutes": [
+        "wget",
+        "httpie"
+      ],
+      "install": {
+        "scoop": "curl",
+        "chocolatey": "curl",
+        "winget": "cURL.cURL",
+        "brew": "curl",
+        "apt": "curl"
+      }
     },
     "wget": {
       "category": "network",
-      "related": ["curl", "httpie"],
       "usages": [
         "wget https://example.com/file.zip  # Download file",
         "wget -r -np -k https://example.com/docs/  # Mirror site section"
-      ]
+      ],
+      "related": [
+        "curl",
+        "httpie"
+      ],
+      "capabilities": [
+        "http",
+        "download"
+      ],
+      "tasks": [
+        "download file",
+        "mirror website"
+      ],
+      "substitutes": [
+        "curl",
+        "aria2c"
+      ],
+      "install": {
+        "scoop": "wget",
+        "chocolatey": "wget",
+        "brew": "wget",
+        "apt": "wget"
+      }
+    },
+    "aria2c": {
+      "category": "network",
+      "usages": [
+        "aria2c <URL>                    # Download file",
+        "aria2c -x 16 <URL>              # Multi-connection download"
+      ],
+      "related": [
+        "curl",
+        "wget"
+      ],
+      "capabilities": [
+        "download",
+        "http"
+      ],
+      "tasks": [
+        "download file",
+        "fast download"
+      ],
+      "substitutes": [
+        "wget",
+        "curl"
+      ],
+      "install": {
+        "scoop": "aria2",
+        "chocolatey": "aria2",
+        "winget": "aria2.aria2",
+        "brew": "aria2",
+        "apt": "aria2"
+      }
     },
     "7z": {
       "category": "system",
-      "related": ["tar"],
       "usages": [
         "7z a archive.7z folder          # Create archive",
         "7z x archive.7z                 # Extract",
         "7z l archive.7z                 # List contents"
-      ]
+      ],
+      "related": [
+        "tar"
+      ],
+      "capabilities": [
+        "archive"
+      ],
+      "tasks": [
+        "create archive",
+        "extract archive",
+        "unzip",
+        "zip files"
+      ],
+      "substitutes": [
+        "tar"
+      ],
+      "install": {
+        "scoop": "7zip",
+        "chocolatey": "7zip",
+        "winget": "7zip.7zip",
+        "brew": "p7zip",
+        "apt": "p7zip-full"
+      }
+    },
+    "tar": {
+      "category": "system",
+      "usages": [
+        "tar -xf archive.tar.gz          # Extract gzip tarball",
+        "tar -czf archive.tar.gz folder  # Create gzip tarball"
+      ],
+      "related": [
+        "7z"
+      ],
+      "capabilities": [
+        "archive"
+      ],
+      "tasks": [
+        "extract archive",
+        "create archive",
+        "untar"
+      ],
+      "substitutes": [
+        "7z"
+      ],
+      "install": {
+        "scoop": "tar",
+        "chocolatey": "tar",
+        "brew": "gnu-tar",
+        "apt": "tar"
+      }
     },
     "bat": {
       "category": "dev-tools",
-      "related": ["less", "delta"],
       "usages": [
         "bat file.ps1                    # Print file with syntax highlighting",
         "bat -n file.ps1                 # Show line numbers"
-      ]
+      ],
+      "related": [
+        "less",
+        "delta"
+      ],
+      "capabilities": [
+        "view",
+        "files"
+      ],
+      "tasks": [
+        "view file",
+        "syntax highlight",
+        "print file"
+      ],
+      "substitutes": [
+        "less"
+      ],
+      "install": {
+        "scoop": "bat",
+        "chocolatey": "bat",
+        "winget": "sharkdp.bat",
+        "brew": "bat",
+        "apt": "bat"
+      }
+    },
+    "less": {
+      "category": "system",
+      "usages": [
+        "less file.txt                   # Page through a file",
+        "less +F logfile                 # Follow a growing file"
+      ],
+      "related": [
+        "bat"
+      ],
+      "capabilities": [
+        "view",
+        "files"
+      ],
+      "tasks": [
+        "page file",
+        "view file"
+      ],
+      "substitutes": [
+        "bat"
+      ],
+      "install": {
+        "scoop": "less",
+        "chocolatey": "less",
+        "brew": "less",
+        "apt": "less"
+      }
     },
     "fzf": {
       "category": "dev-tools",
-      "related": ["fd", "rg"],
       "usages": [
         "fzf                             # Fuzzy-find from stdin",
         "fd | fzf                        # Pick a file from fd results"
-      ]
+      ],
+      "related": [
+        "fd",
+        "rg"
+      ],
+      "capabilities": [
+        "search",
+        "fuzzy",
+        "tui"
+      ],
+      "tasks": [
+        "fuzzy find",
+        "pick from list",
+        "interactive filter"
+      ],
+      "install": {
+        "scoop": "fzf",
+        "chocolatey": "fzf",
+        "winget": "junegunn.fzf",
+        "brew": "fzf",
+        "apt": "fzf"
+      }
     },
     "eza": {
       "category": "system",
-      "related": ["fd", "bat"],
       "usages": [
         "eza -l                          # Long listing",
         "eza -T                          # Tree view",
         "eza -la --git                   # All files with git status"
-      ]
+      ],
+      "related": [
+        "fd",
+        "bat"
+      ],
+      "capabilities": [
+        "files",
+        "list"
+      ],
+      "tasks": [
+        "list files",
+        "tree view",
+        "ls replacement"
+      ],
+      "substitutes": [
+        "lsd",
+        "ls"
+      ],
+      "install": {
+        "scoop": "eza",
+        "chocolatey": "eza",
+        "winget": "eza-community.eza",
+        "brew": "eza",
+        "apt": "eza"
+      }
     },
     "lsd": {
       "category": "system",
-      "related": ["eza"],
       "usages": [
         "lsd -l                          # Long listing",
         "lsd --tree                      # Tree view"
-      ]
-    },
-    "delta": {
-      "category": "dev-tools",
-      "related": ["git", "bat"],
-      "usages": [
-        "git diff | delta                # Highlighted git diff",
-        "delta file.old file.new         # Compare two files"
-      ]
-    },
-    "lazygit": {
-      "category": "dev-tools",
-      "related": ["git", "gh", "tig"],
-      "usages": [
-        "lazygit                         # Open git TUI",
-        "lazygit -p <path>               # Open repo at path"
-      ]
+      ],
+      "related": [
+        "eza"
+      ],
+      "capabilities": [
+        "files",
+        "list"
+      ],
+      "tasks": [
+        "list files",
+        "tree view",
+        "ls replacement"
+      ],
+      "substitutes": [
+        "eza",
+        "ls"
+      ],
+      "install": {
+        "scoop": "lsd",
+        "chocolatey": "lsd",
+        "brew": "lsd",
+        "apt": "lsd"
+      }
     },
     "docker": {
       "category": "dev-tools",
-      "related": ["lazydocker", "dive", "kubectl"],
       "usages": [
         "docker ps                       # List running containers",
         "docker run --rm -it alpine      # Run ephemeral container",
         "docker compose up -d            # Start compose stack"
-      ]
+      ],
+      "related": [
+        "lazydocker",
+        "dive",
+        "kubectl"
+      ],
+      "capabilities": [
+        "containers"
+      ],
+      "tasks": [
+        "list containers",
+        "run container",
+        "docker compose"
+      ],
+      "install": {
+        "scoop": "docker",
+        "chocolatey": "docker-desktop",
+        "winget": "Docker.DockerDesktop",
+        "brew": "docker",
+        "apt": "docker.io"
+      }
+    },
+    "lazydocker": {
+      "category": "dev-tools",
+      "usages": [
+        "lazydocker                      # Docker TUI"
+      ],
+      "related": [
+        "docker",
+        "dive"
+      ],
+      "capabilities": [
+        "containers",
+        "tui"
+      ],
+      "tasks": [
+        "docker tui",
+        "manage containers"
+      ],
+      "install": {
+        "scoop": "lazydocker",
+        "chocolatey": "lazydocker",
+        "brew": "lazydocker"
+      }
+    },
+    "dive": {
+      "category": "dev-tools",
+      "usages": [
+        "dive <image>                    # Inspect image layers"
+      ],
+      "related": [
+        "docker"
+      ],
+      "capabilities": [
+        "containers"
+      ],
+      "tasks": [
+        "inspect docker image",
+        "image layers"
+      ],
+      "install": {
+        "scoop": "dive",
+        "chocolatey": "dive",
+        "brew": "dive"
+      }
     },
     "kubectl": {
       "category": "dev-tools",
-      "related": ["helm", "k9s", "docker"],
       "usages": [
         "kubectl get pods                # List pods",
         "kubectl logs <pod>              # Stream pod logs",
         "kubectl apply -f app.yaml       # Apply manifest"
-      ]
+      ],
+      "related": [
+        "helm",
+        "k9s",
+        "docker"
+      ],
+      "capabilities": [
+        "containers",
+        "kubernetes"
+      ],
+      "tasks": [
+        "list pods",
+        "kubernetes logs",
+        "apply manifest"
+      ],
+      "install": {
+        "scoop": "kubectl",
+        "chocolatey": "kubernetes-cli",
+        "winget": "Kubernetes.kubectl",
+        "brew": "kubectl",
+        "apt": "kubectl"
+      }
+    },
+    "helm": {
+      "category": "dev-tools",
+      "usages": [
+        "helm list                       # List releases",
+        "helm install <name> <chart>     # Install chart"
+      ],
+      "related": [
+        "kubectl",
+        "k9s"
+      ],
+      "capabilities": [
+        "kubernetes"
+      ],
+      "tasks": [
+        "install helm chart",
+        "list helm releases"
+      ],
+      "install": {
+        "scoop": "helm",
+        "chocolatey": "kubernetes-helm",
+        "winget": "Helm.Helm",
+        "brew": "helm",
+        "apt": "helm"
+      }
+    },
+    "k9s": {
+      "category": "dev-tools",
+      "usages": [
+        "k9s                             # Kubernetes TUI",
+        "k9s -n <namespace>              # Open a namespace"
+      ],
+      "related": [
+        "kubectl",
+        "helm"
+      ],
+      "capabilities": [
+        "kubernetes",
+        "tui"
+      ],
+      "tasks": [
+        "kubernetes tui",
+        "browse cluster"
+      ],
+      "install": {
+        "scoop": "k9s",
+        "chocolatey": "k9s",
+        "winget": "Derailed.k9s",
+        "brew": "k9s"
+      }
     },
     "terraform": {
       "category": "dev-tools",
-      "related": ["opentofu", "packer"],
       "usages": [
         "terraform init                  # Initialize working directory",
         "terraform plan                  # Preview changes",
         "terraform apply                 # Apply changes"
-      ]
+      ],
+      "related": [
+        "opentofu",
+        "packer"
+      ],
+      "capabilities": [
+        "infra",
+        "iac"
+      ],
+      "tasks": [
+        "terraform plan",
+        "apply infrastructure",
+        "init terraform"
+      ],
+      "substitutes": [
+        "opentofu"
+      ],
+      "install": {
+        "scoop": "terraform",
+        "chocolatey": "terraform",
+        "winget": "Hashicorp.Terraform",
+        "brew": "terraform",
+        "apt": "terraform"
+      }
+    },
+    "opentofu": {
+      "category": "dev-tools",
+      "usages": [
+        "tofu init                       # Initialize working directory",
+        "tofu plan                       # Preview changes",
+        "tofu apply                      # Apply changes"
+      ],
+      "related": [
+        "terraform",
+        "packer"
+      ],
+      "aliases": [
+        "tofu"
+      ],
+      "capabilities": [
+        "infra",
+        "iac"
+      ],
+      "tasks": [
+        "terraform plan",
+        "apply infrastructure"
+      ],
+      "substitutes": [
+        "terraform"
+      ],
+      "install": {
+        "scoop": "opentofu",
+        "chocolatey": "opentofu",
+        "winget": "OpenTofu.Tofu",
+        "brew": "opentofu"
+      }
+    },
+    "packer": {
+      "category": "dev-tools",
+      "usages": [
+        "packer init template.pkr.hcl    # Init plugins",
+        "packer build template.pkr.hcl   # Build image"
+      ],
+      "related": [
+        "terraform",
+        "opentofu"
+      ],
+      "capabilities": [
+        "infra",
+        "images"
+      ],
+      "tasks": [
+        "build machine image"
+      ],
+      "install": {
+        "scoop": "packer",
+        "chocolatey": "packer",
+        "winget": "Hashicorp.Packer",
+        "brew": "packer"
+      }
     },
     "node": {
       "category": "dev-tools",
-      "related": ["pnpm", "yarn", "fnm"],
       "usages": [
         "node app.js                     # Run a script",
         "node -e \"console.log('hi')\"     # Evaluate inline"
-      ]
+      ],
+      "related": [
+        "pnpm",
+        "yarn",
+        "fnm"
+      ],
+      "capabilities": [
+        "javascript",
+        "runtime"
+      ],
+      "tasks": [
+        "run javascript",
+        "run node script"
+      ],
+      "install": {
+        "scoop": "nodejs",
+        "chocolatey": "nodejs",
+        "winget": "OpenJS.NodeJS",
+        "brew": "node",
+        "apt": "nodejs"
+      }
+    },
+    "pnpm": {
+      "category": "dev-tools",
+      "usages": [
+        "pnpm install                    # Install dependencies",
+        "pnpm run <script>               # Run a package script"
+      ],
+      "related": [
+        "node",
+        "yarn"
+      ],
+      "capabilities": [
+        "javascript",
+        "package-manager"
+      ],
+      "tasks": [
+        "install npm packages",
+        "run node script"
+      ],
+      "substitutes": [
+        "yarn",
+        "npm"
+      ],
+      "install": {
+        "scoop": "pnpm",
+        "chocolatey": "pnpm",
+        "winget": "pnpm.pnpm",
+        "brew": "pnpm"
+      }
+    },
+    "yarn": {
+      "category": "dev-tools",
+      "usages": [
+        "yarn install                    # Install dependencies",
+        "yarn <script>                   # Run a package script"
+      ],
+      "related": [
+        "node",
+        "pnpm"
+      ],
+      "capabilities": [
+        "javascript",
+        "package-manager"
+      ],
+      "tasks": [
+        "install npm packages"
+      ],
+      "substitutes": [
+        "pnpm",
+        "npm"
+      ],
+      "install": {
+        "scoop": "yarn",
+        "chocolatey": "yarn",
+        "winget": "Yarn.Yarn",
+        "brew": "yarn"
+      }
+    },
+    "fnm": {
+      "category": "dev-tools",
+      "usages": [
+        "fnm install --lts               # Install latest LTS Node",
+        "fnm use <version>               # Switch Node version"
+      ],
+      "related": [
+        "node"
+      ],
+      "capabilities": [
+        "javascript",
+        "runtime"
+      ],
+      "tasks": [
+        "install node",
+        "switch node version"
+      ],
+      "install": {
+        "scoop": "fnm",
+        "chocolatey": "fnm",
+        "winget": "Schniz.fnm",
+        "brew": "fnm"
+      }
     },
     "python": {
       "category": "dev-tools",
-      "related": ["uv", "pipx", "py"],
       "usages": [
         "python script.py                # Run a script",
         "python -m venv .venv            # Create virtualenv",
         "python -m http.server 8000      # Serve current directory"
-      ]
+      ],
+      "related": [
+        "uv",
+        "pipx",
+        "py"
+      ],
+      "capabilities": [
+        "python",
+        "runtime"
+      ],
+      "tasks": [
+        "run python",
+        "create venv",
+        "serve directory"
+      ],
+      "substitutes": [
+        "py",
+        "python3"
+      ],
+      "install": {
+        "scoop": "python",
+        "chocolatey": "python",
+        "winget": "Python.Python.3.12",
+        "brew": "python",
+        "apt": "python3"
+      }
     },
     "uv": {
       "category": "dev-tools",
-      "related": ["python", "pipx"],
       "usages": [
         "uv venv                         # Create virtualenv",
         "uv pip install requests         # Install package",
         "uv run script.py                # Run in project env"
-      ]
+      ],
+      "related": [
+        "python",
+        "pipx"
+      ],
+      "capabilities": [
+        "python",
+        "package-manager"
+      ],
+      "tasks": [
+        "create venv",
+        "install python package",
+        "run python"
+      ],
+      "substitutes": [
+        "pipx"
+      ],
+      "install": {
+        "scoop": "uv",
+        "chocolatey": "uv",
+        "winget": "astral-sh.uv",
+        "brew": "uv"
+      }
+    },
+    "pipx": {
+      "category": "dev-tools",
+      "usages": [
+        "pipx install <pkg>              # Install CLI in isolated env",
+        "pipx list                       # List installed CLIs"
+      ],
+      "related": [
+        "python",
+        "uv"
+      ],
+      "capabilities": [
+        "python",
+        "package-manager"
+      ],
+      "tasks": [
+        "install python cli",
+        "isolated python tool"
+      ],
+      "substitutes": [
+        "uv"
+      ],
+      "install": {
+        "scoop": "pipx",
+        "chocolatey": "pipx",
+        "brew": "pipx",
+        "apt": "pipx"
+      }
+    },
+    "py": {
+      "category": "dev-tools",
+      "usages": [
+        "py -3 script.py                 # Run with Python 3",
+        "py -0p                          # List installed interpreters"
+      ],
+      "related": [
+        "python"
+      ],
+      "capabilities": [
+        "python",
+        "runtime"
+      ],
+      "tasks": [
+        "run python"
+      ],
+      "substitutes": [
+        "python"
+      ],
+      "install": {
+        "chocolatey": "python",
+        "winget": "Python.Python.3.12"
+      }
     },
     "nvim": {
       "category": "dev-tools",
-      "related": ["vim", "helix"],
       "usages": [
         "nvim file.txt                   # Edit file",
         "nvim +PlugInstall               # Run command on start"
-      ]
+      ],
+      "related": [
+        "vim",
+        "helix"
+      ],
+      "capabilities": [
+        "editor"
+      ],
+      "tasks": [
+        "edit file",
+        "open editor"
+      ],
+      "substitutes": [
+        "vim",
+        "helix"
+      ],
+      "install": {
+        "scoop": "neovim",
+        "chocolatey": "neovim",
+        "winget": "Neovim.Neovim",
+        "brew": "neovim",
+        "apt": "neovim"
+      }
+    },
+    "vim": {
+      "category": "dev-tools",
+      "usages": [
+        "vim file.txt                    # Edit file",
+        "vim +'set nu' file.txt          # Open with line numbers"
+      ],
+      "related": [
+        "nvim",
+        "helix"
+      ],
+      "capabilities": [
+        "editor"
+      ],
+      "tasks": [
+        "edit file"
+      ],
+      "substitutes": [
+        "nvim",
+        "helix"
+      ],
+      "install": {
+        "scoop": "vim",
+        "chocolatey": "vim",
+        "brew": "vim",
+        "apt": "vim"
+      }
+    },
+    "helix": {
+      "category": "dev-tools",
+      "usages": [
+        "hx file.txt                     # Edit file",
+        "hx --health                     # Show health"
+      ],
+      "related": [
+        "nvim",
+        "vim"
+      ],
+      "aliases": [
+        "hx"
+      ],
+      "capabilities": [
+        "editor"
+      ],
+      "tasks": [
+        "edit file"
+      ],
+      "substitutes": [
+        "nvim",
+        "vim"
+      ],
+      "install": {
+        "scoop": "helix",
+        "chocolatey": "helix",
+        "winget": "Helix.Helix",
+        "brew": "helix"
+      }
+    },
+    "just": {
+      "category": "dev-tools",
+      "usages": [
+        "just                            # Run default recipe",
+        "just --list                     # List recipes",
+        "just <recipe>                   # Run a recipe"
+      ],
+      "related": [
+        "make"
+      ],
+      "capabilities": [
+        "build",
+        "tasks"
+      ],
+      "tasks": [
+        "run task",
+        "list recipes",
+        "project commands"
+      ],
+      "substitutes": [
+        "make"
+      ],
+      "install": {
+        "scoop": "just",
+        "chocolatey": "just",
+        "winget": "Casey.Just",
+        "brew": "just",
+        "apt": "just"
+      }
+    },
+    "make": {
+      "category": "dev-tools",
+      "usages": [
+        "make                            # Run default target",
+        "make <target>                   # Run a target"
+      ],
+      "related": [
+        "just"
+      ],
+      "capabilities": [
+        "build",
+        "tasks"
+      ],
+      "tasks": [
+        "run task",
+        "build project"
+      ],
+      "substitutes": [
+        "just"
+      ],
+      "install": {
+        "scoop": "make",
+        "chocolatey": "make",
+        "brew": "make",
+        "apt": "make"
+      }
+    },
+    "watchexec": {
+      "category": "dev-tools",
+      "usages": [
+        "watchexec <command>             # Rerun on file changes",
+        "watchexec -e rs cargo test      # Watch Rust files"
+      ],
+      "related": [
+        "just"
+      ],
+      "capabilities": [
+        "watch",
+        "tasks"
+      ],
+      "tasks": [
+        "watch files",
+        "rerun on change"
+      ],
+      "install": {
+        "scoop": "watchexec",
+        "chocolatey": "watchexec",
+        "brew": "watchexec"
+      }
+    },
+    "hyperfine": {
+      "category": "dev-tools",
+      "usages": [
+        "hyperfine <command>             # Benchmark a command",
+        "hyperfine -w 3 'cmd a' 'cmd b'  # Compare two commands"
+      ],
+      "capabilities": [
+        "benchmark"
+      ],
+      "tasks": [
+        "benchmark command",
+        "compare command speed"
+      ],
+      "install": {
+        "scoop": "hyperfine",
+        "chocolatey": "hyperfine",
+        "winget": "sharkdp.hyperfine",
+        "brew": "hyperfine"
+      }
+    },
+    "tokei": {
+      "category": "dev-tools",
+      "usages": [
+        "tokei                           # Count lines of code",
+        "tokei -t python                 # Count one language"
+      ],
+      "capabilities": [
+        "code",
+        "stats"
+      ],
+      "tasks": [
+        "count lines of code",
+        "code stats"
+      ],
+      "install": {
+        "scoop": "tokei",
+        "chocolatey": "tokei",
+        "brew": "tokei"
+      }
+    },
+    "sd": {
+      "category": "dev-tools",
+      "usages": [
+        "sd <find> <replace> file        # Replace in a file",
+        "sd -p <find> <replace> file     # Preview replacements"
+      ],
+      "related": [
+        "rg"
+      ],
+      "capabilities": [
+        "search",
+        "replace"
+      ],
+      "tasks": [
+        "replace text",
+        "sed replacement"
+      ],
+      "install": {
+        "scoop": "sd",
+        "chocolatey": "sd",
+        "brew": "sd"
+      }
+    },
+    "dust": {
+      "category": "system",
+      "usages": [
+        "dust                            # Disk usage overview",
+        "dust -d 2 <path>                # Depth-limited usage"
+      ],
+      "capabilities": [
+        "disk",
+        "files"
+      ],
+      "tasks": [
+        "disk usage",
+        "find large files"
+      ],
+      "install": {
+        "scoop": "dust",
+        "chocolatey": "du-dust",
+        "brew": "dust"
+      }
+    },
+    "zoxide": {
+      "category": "system",
+      "usages": [
+        "zoxide add <path>               # Add a directory",
+        "z <query>                       # Jump to a directory"
+      ],
+      "capabilities": [
+        "navigation"
+      ],
+      "tasks": [
+        "jump to directory",
+        "cd history"
+      ],
+      "install": {
+        "scoop": "zoxide",
+        "chocolatey": "zoxide",
+        "winget": "ajeetdsouza.zoxide",
+        "brew": "zoxide"
+      }
+    },
+    "rclone": {
+      "category": "network",
+      "usages": [
+        "rclone ls <remote>:             # List remote",
+        "rclone copy src dest            # Copy files"
+      ],
+      "related": [
+        "curl"
+      ],
+      "capabilities": [
+        "download",
+        "sync",
+        "cloud"
+      ],
+      "tasks": [
+        "sync files",
+        "copy to remote",
+        "cloud storage"
+      ],
+      "install": {
+        "scoop": "rclone",
+        "chocolatey": "rclone",
+        "winget": "Rclone.Rclone",
+        "brew": "rclone",
+        "apt": "rclone"
+      }
+    },
+    "sqlite3": {
+      "category": "dev-tools",
+      "usages": [
+        "sqlite3 db.sqlite               # Open a database",
+        "sqlite3 db.sqlite '.tables'     # List tables"
+      ],
+      "capabilities": [
+        "sql",
+        "database"
+      ],
+      "tasks": [
+        "query sqlite",
+        "open database"
+      ],
+      "install": {
+        "scoop": "sqlite",
+        "chocolatey": "sqlite",
+        "brew": "sqlite",
+        "apt": "sqlite3"
+      }
     },
     "pwsh": {
       "category": "system",
-      "related": ["gsudo", "starship"],
       "usages": [
         "pwsh -NoProfile -File script.ps1  # Run script cleanly",
         "pwsh -Command Get-Date            # Run one command"
-      ]
+      ],
+      "related": [
+        "gsudo",
+        "starship"
+      ],
+      "capabilities": [
+        "shell"
+      ],
+      "tasks": [
+        "run powershell script",
+        "powershell"
+      ],
+      "install": {
+        "scoop": "pwsh",
+        "chocolatey": "powershell-core",
+        "winget": "Microsoft.PowerShell",
+        "brew": "powershell",
+        "apt": "powershell"
+      }
     },
     "gsudo": {
       "category": "system",
-      "related": ["pwsh"],
       "usages": [
         "gsudo <command>                 # Run elevated",
         "gsudo config CacheMode Auto     # Cache credentials"
-      ]
+      ],
+      "related": [
+        "pwsh"
+      ],
+      "capabilities": [
+        "shell",
+        "admin"
+      ],
+      "tasks": [
+        "run elevated",
+        "sudo on windows"
+      ],
+      "install": {
+        "scoop": "gsudo",
+        "chocolatey": "gsudo",
+        "winget": "gerardog.gsudo"
+      }
     },
     "starship": {
       "category": "system",
-      "related": ["pwsh"],
       "usages": [
         "starship init powershell        # Print profile snippet",
         "starship explain                # Explain prompt modules"
-      ]
+      ],
+      "related": [
+        "pwsh"
+      ],
+      "capabilities": [
+        "shell",
+        "prompt"
+      ],
+      "tasks": [
+        "configure prompt",
+        "starship init"
+      ],
+      "install": {
+        "scoop": "starship",
+        "chocolatey": "starship",
+        "winget": "Starship.Starship",
+        "brew": "starship"
+      }
     },
     "winget": {
       "category": "system",
-      "related": ["scoop", "choco"],
       "usages": [
         "winget search <name>            # Search packages",
         "winget install <id>             # Install package",
         "winget upgrade --all            # Upgrade all"
+      ],
+      "related": [
+        "scoop",
+        "choco"
+      ],
+      "capabilities": [
+        "package-manager"
+      ],
+      "tasks": [
+        "search packages",
+        "install package",
+        "upgrade packages"
+      ],
+      "substitutes": [
+        "scoop",
+        "choco"
       ]
     },
     "scoop": {
       "category": "system",
-      "related": ["winget", "choco"],
       "usages": [
         "scoop search <name>             # Search packages",
         "scoop install <name>            # Install package",
         "scoop update *                  # Update all apps"
+      ],
+      "related": [
+        "winget",
+        "choco"
+      ],
+      "capabilities": [
+        "package-manager"
+      ],
+      "tasks": [
+        "search packages",
+        "install package"
+      ],
+      "substitutes": [
+        "winget",
+        "choco"
       ]
     },
     "choco": {
       "category": "system",
-      "related": ["scoop", "winget"],
       "usages": [
         "choco search <name>             # Search packages",
         "choco install <name>            # Install package",
         "choco upgrade all               # Upgrade all"
+      ],
+      "related": [
+        "scoop",
+        "winget"
+      ],
+      "aliases": [
+        "chocolatey"
+      ],
+      "capabilities": [
+        "package-manager"
+      ],
+      "tasks": [
+        "search packages",
+        "install package"
+      ],
+      "substitutes": [
+        "scoop",
+        "winget"
+      ]
+    },
+    "brew": {
+      "category": "system",
+      "usages": [
+        "brew search <name>              # Search packages",
+        "brew install <name>             # Install package",
+        "brew upgrade                    # Upgrade all"
+      ],
+      "related": [
+        "scoop"
+      ],
+      "capabilities": [
+        "package-manager"
+      ],
+      "tasks": [
+        "search packages",
+        "install package"
+      ],
+      "substitutes": [
+        "scoop",
+        "apt"
+      ]
+    },
+    "apt": {
+      "category": "system",
+      "usages": [
+        "apt search <name>               # Search packages",
+        "sudo apt install <name>         # Install package"
+      ],
+      "related": [
+        "brew"
+      ],
+      "capabilities": [
+        "package-manager"
+      ],
+      "tasks": [
+        "search packages",
+        "install package"
+      ],
+      "substitutes": [
+        "brew"
+      ]
+    },
+    "find": {
+      "category": "system",
+      "usages": [
+        "find . -name <pattern>          # Find files by name"
+      ],
+      "capabilities": [
+        "search",
+        "find",
+        "files"
+      ],
+      "tasks": [
+        "find files"
+      ],
+      "substitutes": [
+        "fd"
+      ],
+      "related": [
+        "fd"
+      ]
+    },
+    "ls": {
+      "category": "system",
+      "usages": [
+        "ls -la                          # Long listing including hidden"
+      ],
+      "capabilities": [
+        "files",
+        "list"
+      ],
+      "tasks": [
+        "list files"
+      ],
+      "substitutes": [
+        "eza",
+        "lsd"
+      ]
+    },
+    "npm": {
+      "category": "dev-tools",
+      "usages": [
+        "npm install                     # Install dependencies",
+        "npm run <script>                # Run a package script"
+      ],
+      "capabilities": [
+        "javascript",
+        "package-manager"
+      ],
+      "tasks": [
+        "install npm packages"
+      ],
+      "substitutes": [
+        "pnpm",
+        "yarn"
+      ],
+      "related": [
+        "node",
+        "pnpm"
+      ]
+    },
+    "python3": {
+      "category": "dev-tools",
+      "usages": [
+        "python3 script.py               # Run a script"
+      ],
+      "capabilities": [
+        "python",
+        "runtime"
+      ],
+      "tasks": [
+        "run python"
+      ],
+      "substitutes": [
+        "python"
+      ],
+      "related": [
+        "python",
+        "uv"
       ]
     }
   },
   "kits": {
-    "media": ["ffmpeg", "yt-dlp", "mpv"],
-    "dev-tools": ["fd", "rg", "fzf"],
-    "search": ["rg", "fd", "fzf"]
+    "media": [
+      "ffmpeg",
+      "yt-dlp",
+      "mpv"
+    ],
+    "search": [
+      "rg",
+      "fd",
+      "fzf"
+    ],
+    "git": [
+      "git",
+      "gh",
+      "delta"
+    ],
+    "json": [
+      "jq",
+      "yq"
+    ],
+    "http": [
+      "curl",
+      "httpie"
+    ],
+    "containers": [
+      "docker",
+      "kubectl"
+    ]
   }
 }

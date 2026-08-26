@@ -1,0 +1,19 @@
+{
+  "commands": {
+    "my-internal-cli": {
+      "category": "dev-tools",
+      "capabilities": ["internal"],
+      "tasks": ["company specific tool"],
+      "related": [],
+      "usages": [
+        "my-internal-cli status          # Show status"
+      ],
+      "install": {
+        "scoop": "my-internal-cli"
+      }
+    }
+  },
+  "kits": {
+    "internal": ["my-internal-cli"]
+  }
+}

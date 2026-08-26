@@ -7,12 +7,17 @@
 .EXAMPLE
     cmdpeek -n 3
 .EXAMPLE
+    cmdpeek for json
+.EXAMPLE
     cmdpeek -i
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
     [string]$Argument,
+
+    [Parameter(Position = 1, ValueFromRemainingArguments)]
+    [string[]]$Remaining,
 
     [Alias('n')]
     [int]$Count,
@@ -28,7 +33,7 @@ param(
 
     [string]$Reinstall,
 
-    [ValidateSet('chocolatey', 'scoop', 'winget')]
+    [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
     [string]$Manager,
 
     [string]$Export,
@@ -53,29 +58,55 @@ param(
 
     [string]$Unstar,
 
+    [Alias('For')]
+    [string]$Task,
+
+    [string]$Why,
+
+    [string]$Explain,
+
+    [string]$SearchAvailable,
+
+    [switch]$Have,
+
+    [string]$Capability,
+
+    [switch]$Refresh,
+
+    [switch]$LastInstall,
+
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
 
-if ($Help -or $Argument -in @('-h', '--help', '/?')) {
+if ($Help -or $Argument -in @('-h', '--help', '/?', 'help')) {
     @'
-cmdpeek — show recently installed commands and common usages
+cmdpeek — recently installed commands, gaps, and how to use what you already have
 
 Usage:
   cmdpeek                 Interactive browser
   cmdpeek 5               Quick: since last look (up to 5); fallback to newest 5
   cmdpeek -n 5            Same as cmdpeek 5
+  cmdpeek recent          Same as cmdpeek 5
+  cmdpeek fd              Cheat sheet if that name is unique; else search
+  cmdpeek explain fd      Cheat sheet plus install/substitute notes
+  cmdpeek for json        Installed tools first, then catalog installs
+  cmdpeek why jq          Why this tool, PATH winner, substitutes
+  cmdpeek have [cap]      Installed catalog tools you can use
+  cmdpeek gaps            Human-readable inventory gaps
+  cmdpeek rusty           Installed tools missing from recent history
+  cmdpeek search-available fzf   Catalog + optional package-manager search
   cmdpeek -Since 7d       Window: last|all|ISO|24h|7d (not minutes)
   cmdpeek -i              Interactive mode
   cmdpeek -Search rg      Filter by name
-  cmdpeek fd              Cheat sheet if that name is unique; else search
   cmdpeek -Category media Filter by category
   cmdpeek --reinstall fd  Reinstall a tracked package
   cmdpeek -Json               Full inventory JSON (MCP / scripts)
-  cmdpeek -Json -Recent       MCP recency envelope (since, mode, shims, onPath)
-  cmdpeek -Gaps               JSON gaps: missing related, thin docs, not-on-path, shadowing, kits, category-neighbor
-  cmdpeek -Rusty              Installed tools missing from recent PSReadLine history
+  cmdpeek -Json -Recent       MCP recency envelope
+  cmdpeek -Json -Refresh      Bypass inventory cache
+  cmdpeek -Gaps               JSON gaps
+  cmdpeek -Rusty              Rusty tools
   cmdpeek -Hide LogExpert     Hide a command from cmdpeek -n
   cmdpeek -Star fd            Favorite a command
 
@@ -83,7 +114,8 @@ Keys in interactive TUI:
   Arrows move     Tab/←→ pane     Enter open or copy
   / search        f favorite      F favorites only
   C category      h hide from -n  H hidden only
-  g gaps          ? help          Esc back        q quit
+  g gaps          u use-what-you-have
+  ? help          Esc back        q quit
 '@ | Write-Output
     exit 0
 }
@@ -96,8 +128,43 @@ if (-not (Test-Path -LiteralPath $moduleManifest)) {
 Import-Module $moduleManifest -Force
 
 $invoke = @{}
+$rest = ''
+if ($Remaining) {
+    $rest = (@($Remaining) -join ' ').Trim()
+}
 
-if ($PSBoundParameters.ContainsKey('Count') -and $Count -gt 0) {
+$verb = ''
+if ($Argument) { $verb = $Argument.Trim().ToLowerInvariant() }
+
+if ($verb -eq 'for') {
+    $invoke.Task = $rest
+}
+elseif ($verb -eq 'explain') {
+    $invoke.Explain = $(if ($rest) { $rest } else { '' })
+}
+elseif ($verb -eq 'why') {
+    $invoke.Why = $(if ($rest) { ($rest -split '\s+')[0] } else { '' })
+}
+elseif ($verb -eq 'recent') {
+    if (-not ($PSBoundParameters.ContainsKey('Count') -and $Count -gt 0)) {
+        $invoke.Count = 5
+    }
+    $invoke.NonInteractive = $true
+}
+elseif ($verb -eq 'gaps') {
+    $invoke.HumanGaps = $true
+}
+elseif ($verb -eq 'rusty') {
+    $invoke.Rusty = $true
+}
+elseif ($verb -eq 'have') {
+    $invoke.Have = $true
+    if ($rest) { $invoke.Capability = $rest }
+}
+elseif ($verb -eq 'search-available') {
+    $invoke.SearchAvailable = $rest
+}
+elseif ($PSBoundParameters.ContainsKey('Count') -and $Count -gt 0) {
     $invoke.Count = $Count
 }
 elseif ($Argument -and $Argument -match '^\d+$') {
@@ -106,7 +173,7 @@ elseif ($Argument -and $Argument -match '^\d+$') {
 
 if ($Interactive) { $invoke.Interactive = $true }
 if ($Search) { $invoke.Search = $Search }
-elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-') {
+elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'have', 'search-available')) {
     $invoke.Search = $Argument
 }
 if ($Category) { $invoke.Category = $Category }
@@ -124,5 +191,13 @@ if ($Hide) { $invoke.Hide = $Hide }
 if ($Unhide) { $invoke.Unhide = $Unhide }
 if ($Star) { $invoke.Star = $Star }
 if ($Unstar) { $invoke.Unstar = $Unstar }
+if ($Task) { $invoke.Task = $Task }
+if ($Why) { $invoke.Why = $Why }
+if ($Explain) { $invoke.Explain = $Explain }
+if ($SearchAvailable) { $invoke.SearchAvailable = $SearchAvailable }
+if ($Have) { $invoke.Have = $true }
+if ($Capability) { $invoke.Capability = $Capability }
+if ($Refresh) { $invoke.Refresh = $true }
+if ($LastInstall) { $invoke.LastInstall = $true }
 
 Invoke-CmdPeek @invoke

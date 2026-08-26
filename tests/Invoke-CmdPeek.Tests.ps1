@@ -775,8 +775,57 @@ Describe 'usage-examples.json' {
         $path = Join-Path $PSScriptRoot '..\examples\usage-examples.json'
         $json = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
         @($json.kits.media) | Should -Contain 'ffmpeg'
-        @($json.kits.'dev-tools') | Should -Contain 'fd'
+        @($json.kits.search) | Should -Contain 'fd'
         @($json.kits.search) | Should -Contain 'rg'
+        @($json.kits.git) | Should -Contain 'gh'
         $json.commands.mpv.category | Should -Be 'media'
+    }
+}
+
+Describe 'task resolver CLI' {
+    It 'lists installed matches for cmdpeek -Task json' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-task'
+        $app = Join-Path $scoopRoot 'apps\jq\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"1.7.1","bin":"jq.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+
+        $output = Invoke-CmdPeek -Task json -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-task') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-task') `
+            -DataDirectory (Join-Path $TestDrive 'task-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
+
+        $text = $output | Out-String
+        $text | Should -Match 'You already have'
+        $text | Should -Match 'jq'
+    }
+
+    It 'writes last-install.json when there is a just-installed delta' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-last'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+        (Get-Item (Join-Path $scoopRoot 'apps\fd')).LastWriteTime = [datetime]'2025-08-22T00:00:00'
+
+        $data = Join-Path $TestDrive 'last-install-data'
+        $state = Get-CmdPeekState -DataDirectory $data
+        $state.LastPeekAt = ([datetime]'2025-08-20T12:00:00').ToString('o')
+        Save-CmdPeekState -State $state -DataDirectory $data
+
+        $null = Invoke-CmdPeek -Count 5 -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-last') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-last') `
+            -DataDirectory $data `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
+
+        $last = Get-CmdPeekLastInstall -DataDirectory $data
+        $last | Should -Not -BeNullOrEmpty
+        @($last.commands).command | Should -Contain 'fd'
     }
 }

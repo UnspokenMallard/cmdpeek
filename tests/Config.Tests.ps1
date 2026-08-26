@@ -109,16 +109,37 @@ Describe 'Add-CmdPeekProfileHint' {
         $text = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8
         $text | Should -Match 'Invoke-CmdPeekHint'
         $text | Should -Match 'cmdpeek -NonInteractive -n 1'
+        $text | Should -Match 'function winget'
+        $text | Should -Match 'function pipx'
+        $text | Should -Match 'function cargo'
         ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
     }
 }
 
+Describe 'Get-CmdPeekDataDirectory' {
+    It 'resolves a default path when LOCALAPPDATA is unset' {
+        $had = Test-Path Env:LOCALAPPDATA
+        $prev = $env:LOCALAPPDATA
+        try {
+            if ($had) { Remove-Item Env:LOCALAPPDATA }
+            $dir = Get-CmdPeekDataDirectory
+            $dir | Should -Match 'cmdpeek'
+            { [void](Join-Path $dir 'state.json') } | Should -Not -Throw
+        }
+        finally {
+            if ($had) { $env:LOCALAPPDATA = $prev }
+        }
+    }
+}
+
 Describe 'Set-CmdPeekPreferredPackageManager' {
-    It 'stores chocolatey, scoop, or winget as the preferred manager' {
+    It 'stores chocolatey, scoop, winget, or language-toolchain managers' {
         $state = Get-CmdPeekDefaultState
         $state = Set-CmdPeekPreferredPackageManager -State $state -PackageManager 'scoop'
         $state.PreferredPackageManager | Should -Be 'scoop'
         $state = Set-CmdPeekPreferredPackageManager -State $state -PackageManager 'chocolatey'
         $state.PreferredPackageManager | Should -Be 'chocolatey'
+        $state = Set-CmdPeekPreferredPackageManager -State $state -PackageManager 'pipx'
+        $state.PreferredPackageManager | Should -Be 'pipx'
     }
 }

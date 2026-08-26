@@ -1,6 +1,13 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
+if (-not (Get-Command Read-CmdPeekCatalogFile -ErrorAction SilentlyContinue)) {
+    $catalogHelper = Join-Path $PSScriptRoot 'Catalog.ps1'
+    if (Test-Path -LiteralPath $catalogHelper) {
+        . $catalogHelper
+    }
+}
+
 function Get-CmdPeekExampleCatalogPath {
     [CmdletBinding()]
     param(
@@ -24,28 +31,23 @@ function Get-CmdPeekExampleCatalogPath {
 function Get-CmdPeekExampleCatalog {
     [CmdletBinding()]
     param(
-        [string]$Path
+        [string]$Path,
+        [string]$DataDirectory,
+        [string]$OverlayPath
     )
 
     $resolved = Get-CmdPeekExampleCatalogPath -Path $Path
+    $parsed = Read-CmdPeekCatalogFile -Path $resolved
     $map = @{}
-    if (-not $resolved -or -not (Test-Path -LiteralPath $resolved)) {
-        return $map
-    }
+    if ($parsed -and $parsed.Commands) { $map = $parsed.Commands }
 
-    try {
-        $json = Get-Content -LiteralPath $resolved -Raw -Encoding UTF8 | ConvertFrom-Json
+    $overlay = $OverlayPath
+    if (-not $overlay -and $DataDirectory) {
+        $overlay = Get-CmdPeekOverlayCatalogPath -DataDirectory $DataDirectory
     }
-    catch {
-        return $map
-    }
-
-    if (-not $json -or -not $json.PSObject.Properties['commands']) {
-        return $map
-    }
-
-    foreach ($prop in $json.commands.PSObject.Properties) {
-        $map[$prop.Name] = $prop.Value
+    if ($overlay -and (Test-Path -LiteralPath $overlay)) {
+        $over = Read-CmdPeekCatalogFile -Path $overlay
+        $map = Merge-CmdPeekCatalogHashtable -Base $map -Overlay $over.Commands
     }
 
     return $map
@@ -54,34 +56,23 @@ function Get-CmdPeekExampleCatalog {
 function Get-CmdPeekCatalogKits {
     [CmdletBinding()]
     param(
-        [string]$Path
+        [string]$Path,
+        [string]$DataDirectory,
+        [string]$OverlayPath
     )
 
-    $kits = @{}
     $resolved = Get-CmdPeekExampleCatalogPath -Path $Path
-    if (-not $resolved -or -not (Test-Path -LiteralPath $resolved)) {
-        return $kits
-    }
+    $parsed = Read-CmdPeekCatalogFile -Path $resolved
+    $kits = @{}
+    if ($parsed -and $parsed.Kits) { $kits = $parsed.Kits }
 
-    try {
-        $json = Get-Content -LiteralPath $resolved -Raw -Encoding UTF8 | ConvertFrom-Json
+    $overlay = $OverlayPath
+    if (-not $overlay -and $DataDirectory) {
+        $overlay = Get-CmdPeekOverlayCatalogPath -DataDirectory $DataDirectory
     }
-    catch {
-        return $kits
-    }
-
-    if (-not $json -or -not $json.PSObject.Properties['kits']) {
-        return $kits
-    }
-
-    foreach ($prop in $json.kits.PSObject.Properties) {
-        $members = New-Object System.Collections.Generic.List[string]
-        foreach ($item in @($prop.Value)) {
-            if ($item -is [string] -and $item) {
-                $members.Add($item)
-            }
-        }
-        $kits[$prop.Name] = @($members)
+    if ($overlay -and (Test-Path -LiteralPath $overlay)) {
+        $over = Read-CmdPeekCatalogFile -Path $overlay
+        $kits = Merge-CmdPeekCatalogHashtable -Base $kits -Overlay $over.Kits
     }
 
     return $kits
@@ -94,9 +85,18 @@ function Get-CmdPeekCatalogEntry {
     )
 
     if (-not $Catalog -or -not $Command) { return $null }
+    $needle = $Command.ToLowerInvariant()
     foreach ($key in $Catalog.Keys) {
-        if ($key.ToLowerInvariant() -eq $Command.ToLowerInvariant()) {
+        if ($key.ToLowerInvariant() -eq $needle) {
             return $Catalog[$key]
+        }
+    }
+    foreach ($key in $Catalog.Keys) {
+        $aliases = @(Get-CmdPeekCatalogAliasList -Entry $Catalog[$key])
+        foreach ($alias in $aliases) {
+            if ($alias.ToLowerInvariant() -eq $needle) {
+                return $Catalog[$key]
+            }
         }
     }
     return $null
@@ -117,10 +117,7 @@ function Get-CmdPeekUsageExample {
 
     if ($Count -lt 1) { $Count = 1 }
     $entry = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
-    $usages = @()
-    if ($entry -and $entry.PSObject.Properties['usages'] -and $entry.usages) {
-        $usages = @($entry.usages | ForEach-Object { [string]$_ })
-    }
+    $usages = @(Get-CmdPeekCatalogUsageList -Entry $entry)
 
     $usages = @(Select-CmdPeekDisplayUsage -Usage $usages -Count $Count)
     if ($usages.Count -gt 0) {
@@ -147,13 +144,68 @@ function Get-CmdPeekUsageExample {
         }
     }
 
+    if ($usages.Count -eq 0 -and -not $SkipHelpProbe) {
+        $tldr = Get-CmdPeekTldrExample -Command $Command -Count $Count
+        if ($tldr -and @($tldr).Count -gt 0) {
+            $usages = @($tldr)
+        }
+    }
+
     return @(Select-CmdPeekDisplayUsage -Usage $usages -Count $Count)
+}
+
+function Get-CmdPeekTldrExample {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [int]$Count = 3
+    )
+
+    if ($Count -lt 1) { $Count = 3 }
+    $tldr = $null
+    try {
+        $tldr = Get-Command tldr -ErrorAction SilentlyContinue
+    }
+    catch { }
+    if (-not $tldr) { return @() }
+
+    $file = $tldr.Source
+    if (-not $file) { $file = 'tldr' }
+    $result = Invoke-CmdPeekProcessHelp -FilePath $file -Argument $Command -TimeoutMs 2500
+    if (-not $result -or -not $result.Text) { return @() }
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($raw in @($result.Text -split '\r?\n')) {
+        $trim = $raw.Trim()
+        if ($trim -match '^[`''"](.+)[`''"]$') {
+            $cmdLine = $Matches[1].Trim()
+            if ($cmdLine -and $lines -notcontains $cmdLine) { $lines.Add($cmdLine) }
+        }
+        elseif ($trim -match ('^\s*' + [regex]::Escape($Command) + '\b')) {
+            if ($lines -notcontains $trim) { $lines.Add($trim) }
+        }
+        if ($lines.Count -ge $Count) { break }
+    }
+    return @($lines | Select-Object -First $Count)
 }
 
 function Get-CmdPeekHelpCachePath {
     param([string]$DataDirectory)
     $root = $DataDirectory
-    if (-not $root) { $root = Join-Path $env:LOCALAPPDATA 'cmdpeek' }
+    if (-not $root) {
+        if (Get-Command Get-CmdPeekDataDirectory -ErrorAction SilentlyContinue) {
+            $root = Get-CmdPeekDataDirectory
+        }
+        else {
+            $localApp = $env:LOCALAPPDATA
+            if (-not $localApp) {
+                if ($env:XDG_DATA_HOME) { $localApp = $env:XDG_DATA_HOME }
+                elseif ($HOME) { $localApp = Join-Path $HOME '.local/share' }
+                else { $localApp = [System.IO.Path]::GetTempPath() }
+            }
+            $root = Join-Path $localApp 'cmdpeek'
+        }
+    }
     return (Join-Path $root 'help-cache.json')
 }
 
@@ -204,7 +256,10 @@ function Save-CmdPeekCachedHelpText {
     )
 
     $dir = $DataDirectory
-    if (-not $dir) { $dir = Join-Path $env:LOCALAPPDATA 'cmdpeek' }
+    if (-not $dir) {
+        $cachePath = Get-CmdPeekHelpCachePath -DataDirectory $DataDirectory
+        $dir = Split-Path -Parent $cachePath
+    }
     if (-not (Test-Path -LiteralPath $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
@@ -659,10 +714,15 @@ function Get-CmdPeekRelatedCommand {
         return @()
     }
 
-    $installed = @($InstalledCommand | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() })
+    $fakeHistory = @(
+        foreach ($name in @($InstalledCommand)) {
+            if ($name) { [pscustomobject]@{ Command = [string]$name } }
+        }
+    )
+    $installedSet = Get-CmdPeekInstalledNameSet -History $fakeHistory -Catalog $Catalog
     $related = @(
         $entry.related | ForEach-Object { [string]$_ } | Where-Object {
-            $_ -and $installed -notcontains $_.ToLowerInvariant()
+            $_ -and -not (Test-CmdPeekNameCovered -Name $_ -InstalledSet $installedSet -Catalog $Catalog)
         }
     )
     return $related
