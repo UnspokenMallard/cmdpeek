@@ -31,7 +31,8 @@ Thanks for helping. cmdpeek is a PowerShell 5.1-compatible Windows CLI. Keep tha
 | Path | Role |
 | --- | --- |
 | `src/PackageManager.ps1` | Detect PMs; scan install roots |
-| `src/ExtraSources.ps1` | pipx / npm / cargo / brew / PATH catalog merge |
+| `src/ExtraSources.ps1` | pipx / npm / cargo / brew / PATH catalog merge / apt / pacman |
+| `examples/mocks/` | Fixture data for rusty timestamps, apt/pacman, OpenAI cache, WinGet SHA256, profile v1 |
 | `src/Catalog.ps1` | Overlay, aliases, capabilities, substitutes, install IDs |
 | `src/TaskResolve.ps1` | Task → installed-first matching |
 | `src/CommandHistory.ps1` | Flatten, sort, search, missing-command diff |
