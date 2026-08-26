@@ -348,6 +348,31 @@ function Get-CmdPeekPacmanPackage {
     return @($packages)
 }
 
+function Get-CmdPeekUtf8LfSha256 {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$LiteralPath
+    )
+
+    $bytes = [System.IO.File]::ReadAllBytes($LiteralPath)
+    $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+    if ($text.Length -gt 0 -and [int][char]$text[0] -eq 0xFEFF) {
+        $text = $text.Substring(1)
+    }
+    $normalized = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    $normBytes = $utf8.GetBytes($normalized)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hashBytes = $sha.ComputeHash($normBytes)
+    }
+    finally {
+        $sha.Dispose()
+    }
+    return ((@($hashBytes | ForEach-Object { $_.ToString('X2') })) -join '')
+}
+
 function Get-CmdPeekWinGetReleaseInfo {
     [CmdletBinding()]
     param(
@@ -374,7 +399,7 @@ function Get-CmdPeekWinGetReleaseInfo {
     $payload = Join-Path $dir $payloadName
     $hash = $null
     if (Test-Path -LiteralPath $payload) {
-        $hash = (Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash
+        $hash = Get-CmdPeekUtf8LfSha256 -LiteralPath $payload
     }
     $expected = ''
     if ($info.PSObject.Properties['installerSha256'] -and $info.installerSha256) {
