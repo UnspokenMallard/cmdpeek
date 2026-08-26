@@ -51,6 +51,10 @@
         'Get-CmdPeekPacmanPackage'
         'Get-CmdPeekWinGetReleaseInfo'
         'Get-CmdPeekMockAiExample'
+        'Get-CmdPeekOpenAiExample'
+        'Get-CmdPeekRustyLastUsedPath'
+        'Save-CmdPeekRustyLastUsed'
+        'Get-CmdPeekDefaultUnixRoot'
         'Format-CmdPeekGapOutput'
     )
     CmdletsToExport   = @()

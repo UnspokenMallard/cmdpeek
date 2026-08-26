@@ -49,6 +49,56 @@ function Get-CmdPeekRustyLastUsedMap {
     return $map
 }
 
+function Get-CmdPeekRustyLastUsedPath {
+    [CmdletBinding()]
+    param(
+        [string]$DataDirectory
+    )
+
+    if (Get-Command Get-CmdPeekDataDirectory -ErrorAction SilentlyContinue) {
+        return (Join-Path (Get-CmdPeekDataDirectory -DataDirectory $DataDirectory) 'rusty-last-used.json')
+    }
+    if ($DataDirectory) { return (Join-Path $DataDirectory 'rusty-last-used.json') }
+    return $null
+}
+
+function Save-CmdPeekRustyLastUsed {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [hashtable]$Entries
+    )
+
+    if (-not $Path) { return }
+    if (-not $Entries) { $Entries = @{} }
+    $dir = Split-Path -Parent $Path
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $commandObj = New-Object PSObject
+    foreach ($key in @($Entries.Keys | Sort-Object)) {
+        $e = $Entries[$key]
+        $at = $null
+        $line = ''
+        if ($e -and $e.PSObject.Properties['LastUsedAt'] -and $e.LastUsedAt) {
+            try { $at = ([datetime]$e.LastUsedAt).ToUniversalTime().ToString('o') } catch { $at = $null }
+        }
+        if ($e -and $e.PSObject.Properties['LastLine'] -and $e.LastLine) {
+            $line = [string]$e.LastLine
+        }
+        $commandObj | Add-Member -NotePropertyName ([string]$key) -NotePropertyValue ([pscustomobject]@{
+            lastUsedAt = $at
+            lastLine   = $line
+        })
+    }
+    $payload = [pscustomobject]@{
+        schemaVersion = 1
+        commands      = $commandObj
+    }
+    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
 function Split-CmdPeekHistoryLine {
     param([string]$Line)
 
@@ -72,7 +122,8 @@ function Get-CmdPeekRusty {
         [object[]]$History,
         [string[]]$HistoryPath,
         [int]$RecentLines = 0,
-        [string]$LastUsedPath
+        [string]$LastUsedPath,
+        [switch]$PersistLastUsed
     )
 
     if ($RecentLines -le 0) { $RecentLines = $script:CmdPeekRecentHistoryLines }
@@ -171,5 +222,17 @@ function Get-CmdPeekRusty {
     if ($neverArr.Count -gt 1) { $neverArr = @($neverArr | Sort-Object { $_.Command.ToLowerInvariant() }) }
     $staleArr = @($stale.ToArray())
     if ($staleArr.Count -gt 1) { $staleArr = @($staleArr | Sort-Object { $_.Command.ToLowerInvariant() }) }
+
+    if ($PersistLastUsed -and $LastUsedPath) {
+        $persist = @{}
+        foreach ($k in @($overlay.Keys)) { $persist[$k] = $overlay[$k] }
+        foreach ($k in @($lastUsedFromHist.Keys)) {
+            $line = ''
+            if ($lastLine.ContainsKey($k)) { $line = [string]$lastLine[$k] }
+            $persist[$k] = [pscustomobject]@{ LastUsedAt = $lastUsedFromHist[$k]; LastLine = $line }
+        }
+        Save-CmdPeekRustyLastUsed -Path $LastUsedPath -Entries $persist
+    }
+
     return @($neverArr + $staleArr)
 }

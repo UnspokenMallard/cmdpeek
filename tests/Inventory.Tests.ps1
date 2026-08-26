@@ -381,4 +381,35 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
         $jq.PSObject.Properties.Name | Should -Not -Contain 'usages'
         @($snap.rusty | Where-Object { $_.command -eq 'fd' }).Count | Should -Be 0
     }
+
+    It 'attaches sidecar last-used timestamps on the default snapshot path' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'jq'; PackageName = 'jq'; PackageManager = 'scoop'
+                Category = 'dev-tools'; Usages = @('jq .'); Related = @()
+            }
+        )
+        $hist = Join-Path $TestDrive 'sidecar-hist.txt'
+        @(
+            'jq .'
+            'other'
+        ) | Set-Content -LiteralPath $hist -Encoding UTF8
+        $data = Join-Path $TestDrive 'sidecar-data'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        $sidecar = Join-Path $data 'rusty-last-used.json'
+        @'
+{
+  "schemaVersion": 1,
+  "commands": {
+    "jq": { "lastUsedAt": "2026-03-02T14:11:00Z", "lastLine": "jq '.' notes.json" }
+  }
+}
+'@ | Set-Content -LiteralPath $sidecar -Encoding UTF8
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{} -HistoryPath @($hist) -RecentLines 1 -DataDirectory $data
+        $jq = @($snap.rusty | Where-Object { $_.command -eq 'jq' })[0]
+        $jq.lastUsedAt | Should -Match '2026-03-02'
+        Test-Path -LiteralPath $sidecar | Should -BeTrue
+        $after = Get-Content -LiteralPath $sidecar -Raw -Encoding UTF8
+        $after | Should -Match '2026-03-02T14:11:00Z'
+    }
 }

@@ -36,8 +36,10 @@ Thanks for helping. cmdpeek is a PowerShell 5.1-compatible Windows CLI. Keep tha
 | `src/Catalog.ps1` | Overlay, aliases, capabilities, substitutes, install IDs |
 | `src/TaskResolve.ps1` | Task → installed-first matching |
 | `src/CommandHistory.ps1` | Flatten, sort, search, missing-command diff |
-| `src/UsageExamples.ps1` | Catalog + help / tldr fallback |
+| `src/UsageExamples.ps1` | Catalog + help / tldr / OpenAI fallback |
 | `src/Config.ps1` | `%LOCALAPPDATA%\cmdpeek` state, last-install, inventory cache |
+| `src/CommandUse.ps1` | Rusty tools + `rusty-last-used.json` sidecar |
+| `scripts/New-CmdPeekReleaseArchive.ps1` | Portable zip + SHA256 sidecar for WinGet |
 | `src/InteractiveMode.ps1` | Menus, reinstall prompts, formatters |
 | `src/Tui.ps1` | Arrow-key TUI |
 | `src/Inventory.ps1` | JSON snapshot + gap analysis |

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "model": "mock-gpt-4o-mini",
-  "note": "Canned completions. cmdpeek does not call OpenAI. Point CMDPEEK_OPENAI_MOCK_PATH at this file.",
+  "note": "Canned completions. Point CMDPEEK_OPENAI_MOCK_PATH at this file to skip the live API.",
   "commands": {
     "mystery-cli": {
       "usages": [

@@ -64,16 +64,17 @@ choco install cmdpeek -s . -y
 
 ### WinGet
 
-The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https://github.com/microsoft/winget-pkgs). `InstallerSha256` currently hashes the mock payload in `examples/mocks/` (see `examples/mocks/README.md`). Until a real GitHub release ZIP is published, use `install.ps1`.
+The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https://github.com/microsoft/winget-pkgs). Pack a real installer with `.\scripts\New-CmdPeekReleaseArchive.ps1`; pushing a `v*` tag runs `.github/workflows/release.yml` and attaches the zip. Until that release exists, `InstallerSha256` hashes the mock payload in `examples/mocks/` and you should install with `install.ps1`.
 
 ### First run with no package manager
 
-cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, and `brew`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog command names already on PATH are inventoried.
+cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt`, and `pacman`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog command names already on PATH are inventoried.
 
 1. **Scoop** — user-level, recommended on Windows
 2. **Chocolatey** — typically needs an elevated shell
 3. **WinGet** — App Installer / Microsoft Store
 4. **pipx / npm / cargo / Homebrew** — language and Unix toolchains, scanned when present
+5. **apt / pacman** — `/var/lib/dpkg/status` and `/var/lib/pacman/local` when those commands are on PATH
 
 ## Usage
 
@@ -206,15 +207,17 @@ Command 'yt-dlp' was uninstalled. Reinstall it? [Y/n/chocolatey/scoop/winget]
 | Chocolatey | `%ChocolateyInstall%\lib\<pkg>` + `%ChocolateyInstall%\bin` shims (including shims whose exe lives inside the package folder) |
 | WinGet | `%LOCALAPPDATA%\Microsoft\WinGet\Packages` folder timestamps + `.exe` files that are console apps resolvable on PATH (GUI helpers are skipped) |
 | pipx / npm / cargo / brew | Isolated tool roots (`pipx` venvs, npm prefix, `~/.cargo/bin`, Homebrew Cellar) |
+| apt | `/var/lib/dpkg/status` (`install ok installed`) |
+| pacman | `/var/lib/pacman/local/*/desc` (`%NAME%`, `%VERSION%`, `%BUILDDATE%`) |
 | PATH | Catalog command names resolvable by `Get-Command` that no package manager claimed |
 
 Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
 ## Data and privacy
 
-State lives in `%LOCALAPPDATA%\cmdpeek\state.json` (favorites, commands hidden from `-n`, preferred package manager, last scan). `state.json` does not include telemetry or example-use counters; those unused fields are ignored if an older file still has them.
+State lives in `%LOCALAPPDATA%\cmdpeek\state.json` (favorites, commands hidden from `-n`, preferred package manager, last scan). `state.json` does not include telemetry or example-use counters; those unused fields are ignored if an older file still has them. Rusty last-used dates are stored next to it in `rusty-last-used.json` (PSReadLine history has no timestamps; optional ISO prefixes on history lines are merged into this sidecar on `-Rusty` and empty-delta `-n`).
 
-Optional AI examples: set `CMDPEEK_OPENAI_MOCK_PATH` to a JSON file such as `examples/mocks/openai-examples.json` to attach canned usages. `CMDPEEK_OPENAI_API_KEY` is reserved and does not call the network. tldr pages are used as an optional local fallback when a command has no catalog examples.
+Optional AI examples: set `CMDPEEK_OPENAI_API_KEY` to call OpenAI chat completions when catalog, `--help`, tldr, and the local cache have no usages. Completions are written to `%LOCALAPPDATA%\cmdpeek\openai-examples.json`. Set `CMDPEEK_OPENAI_MOCK_PATH` (for example `examples/mocks/openai-examples.json`) to serve canned usages and skip the network. `CMDPEEK_OPENAI_MODEL` defaults to `gpt-4o-mini`. Tests inject `-HttpRunner` / `-OpenAiRunner` and never call the live API. tldr pages are used as an optional local fallback when a command has no catalog examples.
 
 ## Shell integration
 
@@ -235,6 +238,7 @@ Import-Module .\src\cmdpeek.psd1 -Force
 Invoke-Pester -Path .\tests
 .\src\cmdpeek.ps1 -NonInteractive -n 5
 .\src\cmdpeek.ps1 -Json
+.\scripts\New-CmdPeekReleaseArchive.ps1 -OutputDirectory .\dist
 cd mcp; npm install; npm run build
 ```
 

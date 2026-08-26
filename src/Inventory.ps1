@@ -301,7 +301,10 @@ function ConvertTo-CmdPeekSnapshot {
         [scriptblock]$CommandTester,
         [hashtable]$Kits,
         [string[]]$HistoryPath,
-        [int]$RecentLines = 0
+        [int]$RecentLines = 0,
+        [string]$LastUsedPath,
+        [string]$DataDirectory,
+        [switch]$PersistLastUsed
     )
 
     if (-not $Catalog) { $Catalog = @{} }
@@ -321,14 +324,22 @@ function ConvertTo-CmdPeekSnapshot {
     if (-not $kitMap) { $kitMap = @{} }
     $gaps = @(Get-CmdPeekGap -History $history -Catalog $Catalog -Kits $kitMap)
 
+    $usedPath = $LastUsedPath
+    if (-not $usedPath -and $DataDirectory) {
+        $usedPath = Get-CmdPeekRustyLastUsedPath -DataDirectory $DataDirectory
+    }
     $hpBound = $PSBoundParameters.ContainsKey('HistoryPath')
     $rustySrc = @()
+    $rustyArgs = @{
+        History         = $history
+        RecentLines     = $RecentLines
+        PersistLastUsed = [bool]$PersistLastUsed
+    }
+    if ($usedPath) { $rustyArgs.LastUsedPath = $usedPath }
     if ($hpBound) {
-        $rustySrc = @(Get-CmdPeekRusty -History $history -HistoryPath $HistoryPath -RecentLines $RecentLines)
+        $rustyArgs.HistoryPath = $HistoryPath
     }
-    else {
-        $rustySrc = @(Get-CmdPeekRusty -History $history -RecentLines $RecentLines)
-    }
+    $rustySrc = @(Get-CmdPeekRusty @rustyArgs)
     $rusty = @(
         foreach ($r in $rustySrc) {
             if (-not $r) { continue }
@@ -410,7 +421,8 @@ function Get-CmdPeekInventory {
         [string[]]$HistoryPath,
         [int]$RecentLines = 0,
         [string]$AptStatusPath,
-        [string]$PacmanRoot
+        [string]$PacmanRoot,
+        [string]$LastUsedPath
     )
 
     $managerNames = @()
@@ -456,9 +468,13 @@ function Get-CmdPeekInventory {
         Hidden        = @($state.Hidden)
         CommandTester = $CommandTester
         RecentLines   = $RecentLines
+        DataDirectory = $DataDirectory
     }
     if ($PSBoundParameters.ContainsKey('HistoryPath')) {
         $snapArgs.HistoryPath = $HistoryPath
+    }
+    if ($LastUsedPath) {
+        $snapArgs.LastUsedPath = $LastUsedPath
     }
     $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
 

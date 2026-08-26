@@ -36,6 +36,34 @@ Describe 'Get-CmdPeekRusty' {
         @($rusty)[1].Command | Should -Be 'jq'
     }
 
+    It 'persists ISO-prefixed last-used dates to a sidecar without touching mock fixtures' {
+        $path = Join-Path $TestDrive 'hist-iso.txt'
+        @(
+            '2026-03-02T14:11:00Z jq .'
+            'fd pattern'
+        ) | Set-Content -LiteralPath $path -Encoding UTF8
+        $sidecar = Join-Path $TestDrive 'data-rusty\rusty-last-used.json'
+        $inv = @(
+            [pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop'; Usages = @('jq .') }
+            [pscustomobject]@{ Command = 'fd'; PackageManager = 'scoop'; Usages = @('fd x') }
+        )
+        $null = @(Get-CmdPeekRusty -History $inv -HistoryPath @($path) -RecentLines 1 -LastUsedPath $sidecar -PersistLastUsed)
+        Test-Path -LiteralPath $sidecar | Should -BeTrue
+        $raw = Get-Content -LiteralPath $sidecar -Raw -Encoding UTF8 | ConvertFrom-Json
+        $raw.commands.jq.lastUsedAt | Should -Match '2026-03-02'
+        $raw.commands.jq.lastLine | Should -Match 'jq'
+        $sidecar | Should -Not -Match 'examples'
+    }
+
+    It 'does not write a sidecar unless PersistLastUsed is set' {
+        $path = Join-Path $TestDrive 'hist-nopersist.txt'
+        '2026-03-02T14:11:00Z jq .' | Set-Content -LiteralPath $path -Encoding UTF8
+        $sidecar = Join-Path $TestDrive 'no-write\rusty-last-used.json'
+        $inv = @([pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop'; Usages = @('jq .') })
+        $null = @(Get-CmdPeekRusty -History $inv -HistoryPath @($path) -RecentLines 1 -LastUsedPath $sidecar)
+        Test-Path -LiteralPath $sidecar | Should -BeFalse
+    }
+
     It 'returns empty when history files are missing' {
         $rusty = @(Get-CmdPeekRusty -History $script:inv -HistoryPath @((Join-Path $TestDrive 'no-such-hist.txt')) -RecentLines 5)
         $rusty.Count | Should -Be 0

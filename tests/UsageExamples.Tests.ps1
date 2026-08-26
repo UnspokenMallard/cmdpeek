@@ -44,8 +44,20 @@ Describe 'Get-CmdPeekUsageExample' {
     }
 
     It 'returns no usages for unknown commands instead of a generic --help line' {
-        $examples = @(Get-CmdPeekUsageExample -Command 'some-new-cli' -Catalog $script:catalog)
-        $examples.Count | Should -Be 0
+        $prevKey = $env:CMDPEEK_OPENAI_API_KEY
+        $prevMock = $env:CMDPEEK_OPENAI_MOCK_PATH
+        try {
+            Remove-Item Env:CMDPEEK_OPENAI_API_KEY -ErrorAction SilentlyContinue
+            Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue
+            $examples = @(Get-CmdPeekUsageExample -Command 'some-new-cli' -Catalog $script:catalog)
+            $examples.Count | Should -Be 0
+        }
+        finally {
+            if ($null -eq $prevKey) { Remove-Item Env:CMDPEEK_OPENAI_API_KEY -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_API_KEY = $prevKey }
+            if ($null -eq $prevMock) { Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_MOCK_PATH = $prevMock }
+        }
     }
 
     It 'looks up category from the catalog' {
@@ -293,5 +305,94 @@ Describe 'Get-CmdPeekCachedHelpText TTL' {
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $data 'help-cache.json') -Encoding UTF8
 
         Get-CmdPeekCachedHelpText -Command 'fresh-cli' -DataDirectory $data | Should -Be 'Usage: fresh-cli'
+    }
+}
+
+Describe 'Get-CmdPeekOpenAiExample' {
+    It 'uses an injectable HTTP runner and caches usages under the data directory' {
+        $prevKey = $env:CMDPEEK_OPENAI_API_KEY
+        $prevMock = $env:CMDPEEK_OPENAI_MOCK_PATH
+        $prevModel = $env:CMDPEEK_OPENAI_MODEL
+        try {
+            Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue
+            $env:CMDPEEK_OPENAI_API_KEY = 'sk-test-not-real'
+            $env:CMDPEEK_OPENAI_MODEL = 'gpt-4o-mini'
+            $data = Join-Path $TestDrive 'openai-live-cache'
+            New-Item -ItemType Directory -Force -Path $data | Out-Null
+            $script:capturedUri = $null
+            $script:capturedAuth = $null
+            $runner = {
+                param($Uri, $Headers, $Body)
+                $script:capturedUri = [string]$Uri
+                $script:capturedAuth = [string]$Headers.Authorization
+                return [pscustomobject]@{
+                    choices = @(
+                        [pscustomobject]@{
+                            message = [pscustomobject]@{
+                                content = '{"usages":["widget-cli status  # Show worker status","widget-cli run --dry  # Preview"]}'
+                            }
+                        }
+                    )
+                }
+            }
+            $usages = @(Get-CmdPeekOpenAiExample -Command 'widget-cli' -Count 2 -DataDirectory $data -HttpRunner $runner)
+            $usages.Count | Should -Be 2
+            $usages[0] | Should -Match 'widget-cli status'
+            $script:capturedUri | Should -Match 'chat/completions'
+            $script:capturedAuth | Should -Match 'Bearer sk-test-not-real'
+            $cache = Join-Path $data 'openai-examples.json'
+            Test-Path -LiteralPath $cache | Should -BeTrue
+            $raw = Get-Content -LiteralPath $cache -Raw -Encoding UTF8 | ConvertFrom-Json
+            @($raw.commands.'widget-cli'.usages)[0] | Should -Match 'widget-cli status'
+        }
+        finally {
+            if ($null -eq $prevKey) { Remove-Item Env:CMDPEEK_OPENAI_API_KEY -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_API_KEY = $prevKey }
+            if ($null -eq $prevMock) { Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_MOCK_PATH = $prevMock }
+            if ($null -eq $prevModel) { Remove-Item Env:CMDPEEK_OPENAI_MODEL -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_MODEL = $prevModel }
+        }
+    }
+
+    It 'does not call OpenAI when SkipHelpProbe is set' {
+        $prevKey = $env:CMDPEEK_OPENAI_API_KEY
+        $prevMock = $env:CMDPEEK_OPENAI_MOCK_PATH
+        try {
+            Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue
+            $env:CMDPEEK_OPENAI_API_KEY = 'sk-test-not-real'
+            $script:openaiCalled = $false
+            $runner = {
+                $script:openaiCalled = $true
+                throw 'network should not run'
+            }
+            $usages = @(Get-CmdPeekUsageExample -Command 'no-such-cli-xyz' -Catalog @{} -SkipHelpProbe -OpenAiRunner $runner)
+            $usages.Count | Should -Be 0
+            $script:openaiCalled | Should -BeFalse
+        }
+        finally {
+            if ($null -eq $prevKey) { Remove-Item Env:CMDPEEK_OPENAI_API_KEY -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_API_KEY = $prevKey }
+            if ($null -eq $prevMock) { Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_MOCK_PATH = $prevMock }
+        }
+    }
+
+    It 'skips the live API when CMDPEEK_OPENAI_MOCK_PATH is set' {
+        $prevKey = $env:CMDPEEK_OPENAI_API_KEY
+        $prevMock = $env:CMDPEEK_OPENAI_MOCK_PATH
+        try {
+            $env:CMDPEEK_OPENAI_API_KEY = 'sk-test-not-real'
+            $env:CMDPEEK_OPENAI_MOCK_PATH = (Join-Path $TestDrive 'missing-openai.json')
+            $runner = { throw 'network should not run when mock path is set' }
+            $usages = @(Get-CmdPeekOpenAiExample -Command 'widget-cli' -HttpRunner $runner)
+            $usages.Count | Should -Be 0
+        }
+        finally {
+            if ($null -eq $prevKey) { Remove-Item Env:CMDPEEK_OPENAI_API_KEY -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_API_KEY = $prevKey }
+            if ($null -eq $prevMock) { Remove-Item Env:CMDPEEK_OPENAI_MOCK_PATH -ErrorAction SilentlyContinue }
+            else { $env:CMDPEEK_OPENAI_MOCK_PATH = $prevMock }
+        }
     }
 }

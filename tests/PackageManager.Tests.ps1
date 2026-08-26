@@ -32,6 +32,13 @@ Describe 'Get-CmdPeekPackageManager' {
         $result.Count | Should -BeGreaterThan 2
     }
 
+    It 'includes apt and pacman when those commands are present' {
+        $result = @(Get-CmdPeekPackageManager -CommandTester { param($Name) $Name -eq 'apt' -or $Name -eq 'pacman' })
+        $result.Name | Should -Contain 'apt'
+        $result.Name | Should -Contain 'pacman'
+        $result.Count | Should -Be 2
+    }
+
     It 'returns empty when no package manager is present' {
         $result = @(Get-CmdPeekPackageManager -CommandTester { $false })
         $result.Count | Should -Be 0

@@ -61,3 +61,28 @@ Describe 'language and PATH scanners' {
         @($merged | Where-Object { $_.Command -eq 'jq' })[0].PackageManager | Should -Be 'path'
     }
 }
+
+Describe 'live apt and pacman default roots' {
+    It 'scans /var/lib/dpkg/status when StatusPath is omitted' {
+        $default = Get-CmdPeekDefaultUnixRoot -Manager apt
+        if (-not (Test-Path -LiteralPath $default)) {
+            Set-ItResult -Skipped -Because 'no dpkg status database on this OS'
+            return
+        }
+        $pkgs = @(Get-CmdPeekAptPackage)
+        $pkgs.Count | Should -BeGreaterThan 0
+        $pkgs[0].PackageManager | Should -Be 'apt'
+        $pkgs[0].Path | Should -Be $default
+    }
+
+    It 'scans /var/lib/pacman/local when LocalRoot is omitted' {
+        $default = Get-CmdPeekDefaultUnixRoot -Manager pacman
+        if (-not (Test-Path -LiteralPath $default)) {
+            Set-ItResult -Skipped -Because 'no pacman local database on this OS'
+            return
+        }
+        $pkgs = @(Get-CmdPeekPacmanPackage)
+        $pkgs.Count | Should -BeGreaterThan 0
+        $pkgs[0].PackageManager | Should -Be 'pacman'
+    }
+}

@@ -2,8 +2,9 @@
 # Submit the generated multi-file manifests to microsoft/winget-pkgs.
 #
 # InstallerSha256 is the SHA256 of examples/mocks/winget-portable-payload.txt
-# (see examples/mocks/winget-release.json). Replace both with a real GitHub
-# release ZIP hash before submitting to winget-pkgs.
+# (see examples/mocks/winget-release.json). Pack a real zip with
+# scripts/New-CmdPeekReleaseArchive.ps1 (or tag v*) and replace this hash
+# before submitting to winget-pkgs.
 #
 # Until a signed GitHub release exists, install with:
 #   irm https://raw.githubusercontent.com/cmdpeek/cmdpeek/main/install.ps1 | iex
