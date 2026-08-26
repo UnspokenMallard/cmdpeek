@@ -1,6 +1,6 @@
 # Agent playbook for cmdpeek
 
-cmdpeek inventories CLIs installed via Scoop, Chocolatey, WinGet, pipx, npm, cargo, Homebrew, and PATH, then attaches usage examples.
+cmdpeek inventories CLIs installed via Scoop, Chocolatey, WinGet, pipx, npm, cargo, Homebrew, apt, pacman, and PATH, then attaches usage examples.
 
 ## When to use it
 

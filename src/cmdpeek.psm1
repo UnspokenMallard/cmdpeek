@@ -62,7 +62,9 @@ function Invoke-CmdPeek {
         [string]$CargoRoot,
         [string]$BrewRoot,
         [string]$AptStatusPath,
-        [string]$PacmanRoot
+        [string]$PacmanRoot,
+        [string]$LastUsedPath,
+        [scriptblock]$OpenAiRunner
     )
 
     if ($Recent) {
@@ -271,7 +273,7 @@ function Invoke-CmdPeek {
         $whyRow = Get-CmdPeekWhyCommand -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
         $exact = @(Select-CmdPeekExactCommand -History $history -Query $Explain)
         if ($exact.Count -eq 1) {
-            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
             if ($probed.Count -gt 0 -and $probed[0].PSObject.Properties['Usages']) {
                 $whyRow.usages = @($probed[0].Usages)
             }
@@ -315,7 +317,7 @@ function Invoke-CmdPeek {
         if ($Search -or $Category) {
             $rows = @(Search-CmdPeekCommand -History $rows -Query $Search -Category $Category)
         }
-        $rows = @(Add-CmdPeekUsageProbe -History $rows -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+        $rows = @(Add-CmdPeekUsageProbe -History $rows -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
         $commands = @(
             foreach ($row in $rows) {
                 [pscustomobject]@{
@@ -363,7 +365,7 @@ function Invoke-CmdPeek {
                 return
             }
         }
-        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
         $snapArgs = @{
             History        = $history
             Manager        = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
@@ -372,9 +374,13 @@ function Invoke-CmdPeek {
             Hidden         = @($state.Hidden)
             CommandTester  = $CommandTester
             RecentLines    = $RecentLines
+            DataDirectory  = $DataDirectory
         }
         if ($PSBoundParameters.ContainsKey('HistoryPath')) {
             $snapArgs.HistoryPath = $HistoryPath
+        }
+        if ($LastUsedPath) {
+            $snapArgs.LastUsedPath = $LastUsedPath
         }
         $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
         if ($Gaps -and -not $HumanGaps) {
@@ -421,7 +427,9 @@ function Invoke-CmdPeek {
                 return
             }
         }
-        $rustyRows = @(Get-CmdPeekRusty -History $history -HistoryPath @($hp) -RecentLines $RecentLines)
+        $usedPath = $LastUsedPath
+        if (-not $usedPath) { $usedPath = Get-CmdPeekRustyLastUsedPath -DataDirectory $DataDirectory }
+        $rustyRows = @(Get-CmdPeekRusty -History $history -HistoryPath @($hp) -RecentLines $RecentLines -LastUsedPath $usedPath -PersistLastUsed)
         if ($rustyRows.Count -eq 0) {
             Write-Output (Format-CmdPeekQuickOutput -History @() -ExampleCount 3 -Rusty)
             return
@@ -458,12 +466,12 @@ function Invoke-CmdPeek {
                 $whyRow = Get-CmdPeekWhyCommand -Command $row.Command -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
                 $row | Add-Member -NotePropertyName SubstitutesInstalled -NotePropertyValue @($whyRow.substitutesInstalled) -Force
                 $row | Add-Member -NotePropertyName InstallCommands -NotePropertyValue @($whyRow.installCommands) -Force
-                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
                 Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 5 -CheatSheet)
                 return
             }
             if ($exact.Count -gt 1) {
-                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
                 Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
                 return
             }
@@ -471,7 +479,7 @@ function Invoke-CmdPeek {
         }
 
         $flat = @(Select-CmdPeekQuickHistory -History $history -Count 0)
-        $flat = @(Add-CmdPeekUsageProbe -History $flat -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+        $flat = @(Add-CmdPeekUsageProbe -History $flat -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
         Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
         return
     }
@@ -527,6 +535,9 @@ function Invoke-CmdPeek {
             )
             RecentLines = $RecentLines
         }
+        $usedPath = $LastUsedPath
+        if (-not $usedPath) { $usedPath = Get-CmdPeekRustyLastUsedPath -DataDirectory $DataDirectory }
+        if ($usedPath) { $rustyArgs.LastUsedPath = $usedPath; $rustyArgs.PersistLastUsed = $true }
         if ($PSBoundParameters.ContainsKey('HistoryPath')) {
             $anyHist = $false
             foreach ($p in @($HistoryPath)) {
@@ -548,7 +559,7 @@ function Invoke-CmdPeek {
         }
     }
 
-    $slice = @(Add-CmdPeekUsageProbe -History $slice -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+    $slice = @(Add-CmdPeekUsageProbe -History $slice -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
     if ($rustyOut) {
         Write-Output $rustyOut
     }
@@ -604,5 +615,9 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekPacmanPackage'
     'Get-CmdPeekWinGetReleaseInfo'
     'Get-CmdPeekMockAiExample'
+    'Get-CmdPeekOpenAiExample'
+    'Get-CmdPeekRustyLastUsedPath'
+    'Save-CmdPeekRustyLastUsed'
+    'Get-CmdPeekDefaultUnixRoot'
     'Format-CmdPeekGapOutput'
 )

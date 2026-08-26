@@ -112,7 +112,8 @@ function Get-CmdPeekUsageExample {
         [string]$HelpText,
         [scriptblock]$HelpRunner,
         [string]$DataDirectory,
-        [switch]$SkipHelpProbe
+        [switch]$SkipHelpProbe,
+        [scriptblock]$OpenAiRunner
     )
 
     if ($Count -lt 1) { $Count = 1 }
@@ -154,6 +155,11 @@ function Get-CmdPeekUsageExample {
     if ($usages.Count -eq 0) {
         $ai = @(Get-CmdPeekMockAiExample -Command $Command -Count $Count -DataDirectory $DataDirectory)
         if ($ai.Count -gt 0) { $usages = @($ai) }
+    }
+
+    if ($usages.Count -eq 0 -and -not $SkipHelpProbe) {
+        $live = @(Get-CmdPeekOpenAiExample -Command $Command -Count $Count -DataDirectory $DataDirectory -HttpRunner $OpenAiRunner)
+        if ($live.Count -gt 0) { $usages = @($live) }
     }
 
     return @(Select-CmdPeekDisplayUsage -Usage $usages -Count $Count)
@@ -203,6 +209,124 @@ function Get-CmdPeekMockAiExample {
         $list = @(Get-CmdPeekCatalogUsageList -Entry $entry)
     }
     return @(Select-CmdPeekDisplayUsage -Usage $list -Count $Count)
+}
+
+function Save-CmdPeekOpenAiCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [string[]]$Usages,
+        [string]$DataDirectory
+    )
+
+    if (-not $DataDirectory -or -not $Command -or @($Usages).Count -eq 0) { return }
+    $path = Join-Path $DataDirectory 'openai-examples.json'
+    $commandObj = New-Object PSObject
+    if (Test-Path -LiteralPath $path) {
+        try {
+            $existing = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($existing -and $existing.PSObject.Properties['commands'] -and $existing.commands) {
+                foreach ($prop in $existing.commands.PSObject.Properties) {
+                    $commandObj | Add-Member -NotePropertyName $prop.Name -NotePropertyValue ([pscustomobject]@{
+                        usages = @($prop.Value.usages)
+                    }) -Force
+                }
+            }
+        }
+        catch { }
+    }
+    $commandObj | Add-Member -NotePropertyName $Command -NotePropertyValue ([pscustomobject]@{
+        usages = @($Usages)
+    }) -Force
+    $dir = Split-Path -Parent $path
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $payload = [pscustomobject]@{
+        schemaVersion = 1
+        model         = 'cache'
+        commands      = $commandObj
+    }
+    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $path -Encoding UTF8
+}
+
+function Get-CmdPeekOpenAiExample {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [int]$Count = 3,
+        [string]$DataDirectory,
+        [scriptblock]$HttpRunner
+    )
+
+    if ($Count -lt 1) { $Count = 3 }
+    if ($env:CMDPEEK_OPENAI_MOCK_PATH) { return @() }
+    $key = $env:CMDPEEK_OPENAI_API_KEY
+    if ([string]::IsNullOrWhiteSpace($key) -and -not $HttpRunner) { return @() }
+
+    $model = 'gpt-4o-mini'
+    if ($env:CMDPEEK_OPENAI_MODEL) { $model = [string]$env:CMDPEEK_OPENAI_MODEL }
+    $safeCmd = $Command.Replace('\', '\\').Replace('"', '\"')
+    $safeModel = $model.Replace('\', '\\').Replace('"', '\"')
+    $body = '{"model":"' + $safeModel + '","temperature":0,"messages":[{"role":"system","content":"Return only JSON of the form {\"usages\":[\"cmd args  # comment\"]} with 1 to 3 examples for the named CLI. No markdown."},{"role":"user","content":"Command: ' + $safeCmd + '"}]}'
+    $uri = 'https://api.openai.com/v1/chat/completions'
+    $headers = @{
+        Authorization  = ('Bearer {0}' -f $key)
+        'Content-Type' = 'application/json'
+    }
+
+    $response = $null
+    try {
+        if ($HttpRunner) {
+            $response = & $HttpRunner $uri $headers $body
+        }
+        else {
+            $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType 'application/json'
+        }
+    }
+    catch {
+        return @()
+    }
+    if (-not $response) { return @() }
+
+    $text = $null
+    if ($response.PSObject.Properties['choices'] -and $response.choices) {
+        $choice = @($response.choices)[0]
+        if ($choice.message -and $choice.message.content) {
+            $text = [string]$choice.message.content
+        }
+    }
+    elseif ($response -is [string]) {
+        $text = $response
+    }
+    if ([string]::IsNullOrWhiteSpace($text)) { return @() }
+
+    $text = $text.Trim()
+    if ($text -match '(?s)```(?:json)?\s*(.*)```') { $text = $Matches[1].Trim() }
+
+    $usages = New-Object System.Collections.Generic.List[string]
+    try {
+        $parsed = $text | ConvertFrom-Json
+        if ($parsed.PSObject.Properties['usages'] -and $parsed.usages) {
+            foreach ($u in @($parsed.usages)) {
+                $line = ConvertTo-CmdPeekUsageString -Usage $u
+                if ($line) { $usages.Add($line) }
+            }
+        }
+    }
+    catch {
+        foreach ($raw in @($text -split '\r?\n')) {
+            $trim = $raw.Trim().TrimStart('-').Trim()
+            if ($trim -and $trim -notmatch '^\{' -and $usages -notcontains $trim) { $usages.Add($trim) }
+        }
+    }
+    $out = @(Select-CmdPeekDisplayUsage -Usage @($usages) -Count $Count)
+    if ($out.Count -gt 0) {
+        Save-CmdPeekOpenAiCache -Command $Command -Usages $out -DataDirectory $DataDirectory
+    }
+    return $out
 }
 
 function Get-CmdPeekTldrExample {
@@ -843,7 +967,8 @@ function Add-CmdPeekUsageProbe {
         [object[]]$History,
         [hashtable]$Catalog,
         [string]$DataDirectory,
-        [scriptblock]$HelpRunner
+        [scriptblock]$HelpRunner,
+        [scriptblock]$OpenAiRunner
     )
 
     foreach ($row in @($History)) {
@@ -855,7 +980,7 @@ function Add-CmdPeekUsageProbe {
             continue
         }
         try {
-            $usages = @(Get-CmdPeekUsageExample -Command $row.Command -Catalog $Catalog -Count 5 -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
+            $usages = @(Get-CmdPeekUsageExample -Command $row.Command -Catalog $Catalog -Count 5 -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
         }
         catch {
             $usages = @()

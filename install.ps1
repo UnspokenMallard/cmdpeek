@@ -20,7 +20,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA 'cmdpeek'
+    $localApp = $env:LOCALAPPDATA
+    if (-not $localApp) {
+        if ($env:XDG_DATA_HOME) { $localApp = $env:XDG_DATA_HOME }
+        elseif ($HOME) { $localApp = Join-Path $HOME '.local/share' }
+        else { $localApp = [System.IO.Path]::GetTempPath() }
+    }
+    $InstallDir = Join-Path $localApp 'cmdpeek'
 }
 
 $repoRoot = $PSScriptRoot
