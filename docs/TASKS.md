@@ -5,10 +5,10 @@ Shipped in this branch: catalog capabilities/aliases/substitutes/install IDs, ov
 - [x] Calendar timestamps for rusty tools — default sidecar plus profile `AddToHistoryHandler` (`Add-CmdPeekHistoryTimestamp`)
 - [x] apt/pacman inventory — live scan when those managers are enabled
 - [x] OpenAI-backed examples — `CMDPEEK_OPENAI_API_KEY` with injectable HTTP in tests
-- [x] WinGet/Scoop pack script — `scripts/New-CmdPeekReleaseArchive.ps1 -UpdateManifest` writes zip SHA256 into `winget/manifest.yaml` and `scoop/cmdpeek.json`; Chocolatey nuspec version is bumped; `.github/workflows/release.yml` uploads those files on `v*` tags
+- [x] WinGet/Scoop pack script — `New-CmdPeekReleaseArchive.ps1 -UpdateManifest` writes zip SHA256 into Scoop/WinGet/Chocolatey; release workflow runs on `v*` or numeric tags and `workflow_dispatch` `attach_tag`
 - [x] Profile snippet upgrade — `Add-CmdPeekProfileHint` replaces older blocks in place (including timestamp registration)
 - [x] `cmdpeek agent-export` — markdown playbook of installed tools; MCP `export_agent_playbook` / `cmdpeek://agent-export`
 
 Still not live:
 
-- [ ] A published GitHub release ZIP (tag `v*` on the default branch to run the release workflow, then commit the updated scoop/winget hashes if you want them in-tree)
+- [ ] Attach the portable zip to GitHub release `0.2.0` (the tag is `0.2.0`, so the original `v*` workflow did not run). After this fix is on the default branch: Actions → release → Run workflow → `attach_tag` = `0.2.0`. Then commit the scoop/winget hashes from that zip.

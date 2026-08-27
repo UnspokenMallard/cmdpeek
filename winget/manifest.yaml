@@ -1,13 +1,11 @@
-# WinGet manifest template (0.2.0-mock)
+# WinGet manifest template
 # Submit the generated multi-file manifests to microsoft/winget-pkgs.
 #
-# InstallerSha256 is the SHA256 of examples/mocks/winget-portable-payload.txt
-# (see examples/mocks/winget-release.json). Pack a real zip with
-# scripts/New-CmdPeekReleaseArchive.ps1 (or tag v*) and replace this hash
-# before submitting to winget-pkgs.
+# Pack a zip with scripts/New-CmdPeekReleaseArchive.ps1 -UpdateManifest
+# (or tag a release) so InstallerUrl/InstallerSha256 match a GitHub asset.
 #
-# Until a signed GitHub release exists, install with:
-#   irm https://raw.githubusercontent.com/cmdpeek/cmdpeek/main/install.ps1 | iex
+# Until the zip is attached to a GitHub release, install with:
+#   irm https://raw.githubusercontent.com/UnspokenMallard/cmdpeek/main/install.ps1 | iex
 # or from a clone:
 #   .\install.ps1
 
@@ -15,8 +13,8 @@ PackageIdentifier: cmdpeek.cmdpeek
 PackageVersion: 0.2.0-mock
 PackageLocale: en-US
 Publisher: cmdpeek
-PublisherUrl: https://github.com/cmdpeek/cmdpeek
-PublisherSupportUrl: https://github.com/cmdpeek/cmdpeek/issues
+PublisherUrl: https://github.com/UnspokenMallard/cmdpeek
+PublisherSupportUrl: https://github.com/UnspokenMallard/cmdpeek/issues
 Author: cmdpeek contributors
 PackageName: cmdpeek
 License: MIT

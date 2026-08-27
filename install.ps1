@@ -34,7 +34,7 @@ if (-not $repoRoot) {
     $tmp = Join-Path $env:TEMP ('cmdpeek-install-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tmp -Force | Out-Null
     $zip = Join-Path $tmp 'cmdpeek.zip'
-    $url = 'https://github.com/cmdpeek/cmdpeek/archive/refs/heads/main.zip'
+    $url = 'https://github.com/UnspokenMallard/cmdpeek/archive/refs/heads/main.zip'
     Write-Host "Downloading $url"
     Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
     Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force

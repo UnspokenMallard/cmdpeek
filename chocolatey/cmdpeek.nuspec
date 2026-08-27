@@ -7,7 +7,7 @@
     <authors>cmdpeek contributors</authors>
     <owners>cmdpeek</owners>
     <licenseUrl>https://opensource.org/licenses/MIT</licenseUrl>
-    <projectUrl>https://github.com/cmdpeek/cmdpeek</projectUrl>
+    <projectUrl>https://github.com/UnspokenMallard/cmdpeek</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Show the most recently installed CLI commands, match tasks to tools you already have, and attach usage examples.</description>
     <summary>Recently installed commands + how to use them.</summary>

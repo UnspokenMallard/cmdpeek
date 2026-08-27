@@ -10,6 +10,8 @@ param(
     [string]$RepoRoot,
     [string]$OutputDirectory,
     [string]$Version,
+    [string]$GitHubRepository,
+    [string]$Tag,
     [switch]$UpdateManifest
 )
 
@@ -73,15 +75,43 @@ finally {
     }
 }
 
+if (-not $GitHubRepository) {
+    $GitHubRepository = [string]$env:GITHUB_REPOSITORY
+}
+if (-not $GitHubRepository) {
+    try {
+        $remote = git -C $RepoRoot remote get-url origin 2>$null
+        if ($remote -match 'github\.com[:/]([^/]+/[^/.]+)') {
+            $GitHubRepository = $Matches[1] -replace '\.git$', ''
+        }
+    }
+    catch { }
+}
+if (-not $GitHubRepository) { $GitHubRepository = 'UnspokenMallard/cmdpeek' }
+
+if (-not $Tag) {
+    if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME) {
+        $Tag = [string]$env:GITHUB_REF_NAME
+    }
+    elseif ($env:CMDPEEK_RELEASE_TAG) {
+        $Tag = [string]$env:CMDPEEK_RELEASE_TAG
+    }
+    else {
+        $Tag = 'v' + $Version
+    }
+}
+
 $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
 $infoPath = Join-Path $OutputDirectory 'cmdpeek-win-x64.sha256.json'
+$installerUrl = 'https://github.com/{0}/releases/download/{1}/{2}' -f $GitHubRepository, $Tag, $zipName
 $info = @{
     schemaVersion     = 1
     packageIdentifier = 'cmdpeek.cmdpeek'
     packageVersion    = $Version
-    installerUrl      = ('https://github.com/cmdpeek/cmdpeek/releases/download/v{0}/{1}' -f $Version, $zipName)
+    installerUrl      = $installerUrl
     installerSha256   = $hash
     zipFile           = $zipName
+    tag               = $Tag
 }
 ($info | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $infoPath -Encoding UTF8
 
@@ -133,4 +163,6 @@ Write-Output ([pscustomobject]@{
     InstallerSha256 = $hash
     InfoPath        = $infoPath
     PackageVersion  = $Version
+    InstallerUrl    = $installerUrl
+    Tag             = $Tag
 })

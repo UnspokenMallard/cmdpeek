@@ -19,6 +19,18 @@ Describe 'New-CmdPeekReleaseArchive' {
         $info.installerSha256 | Should -Be $hash
         $result.InstallerSha256 | Should -Be $hash
         $info.packageVersion | Should -Be '0.0.0-test'
+        $info.installerUrl | Should -Match 'UnspokenMallard/cmdpeek'
+    }
+
+    It 'uses an explicit tag in the installer URL' {
+        $repo = Join-Path $PSScriptRoot '..'
+        $out = Join-Path $TestDrive 'dist-tag'
+        $script = Join-Path (Join-Path $repo 'scripts') 'New-CmdPeekReleaseArchive.ps1'
+        $result = @(
+            & $script -RepoRoot $repo -OutputDirectory $out -Version '0.2.0' -Tag '0.2.0' -GitHubRepository 'UnspokenMallard/cmdpeek'
+        ) | Select-Object -Last 1
+        $info = Get-Content -LiteralPath $result.InfoPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $info.installerUrl | Should -Be 'https://github.com/UnspokenMallard/cmdpeek/releases/download/0.2.0/cmdpeek-win-x64-v0.2.0.zip'
     }
 
     It 'updates winget, scoop, and chocolatey manifests in a fake repo' {
@@ -40,7 +52,9 @@ Describe 'New-CmdPeekReleaseArchive' {
         }
         $out = Join-Path $TestDrive 'release-dist'
         $script = Join-Path (Join-Path $fake 'scripts') 'New-CmdPeekReleaseArchive.ps1'
-        $null = & $script -RepoRoot $fake -OutputDirectory $out -Version '9.9.9-test' -UpdateManifest
+        $result = @(
+            & $script -RepoRoot $fake -OutputDirectory $out -Version '9.9.9-test' -Tag '9.9.9-test' -GitHubRepository 'UnspokenMallard/cmdpeek' -UpdateManifest
+        )
         $hash = (Get-FileHash -LiteralPath (Join-Path $out 'cmdpeek-win-x64-v9.9.9-test.zip') -Algorithm SHA256).Hash.ToUpperInvariant()
         $winget = Get-Content -LiteralPath (Join-Path (Join-Path $fake 'winget') 'manifest.yaml') -Raw -Encoding UTF8
         $winget | Should -Match 'PackageVersion: 9.9.9-test'
@@ -49,6 +63,8 @@ Describe 'New-CmdPeekReleaseArchive' {
         $scoop | Should -Match '"version": "9.9.9-test"'
         $scoop | Should -Match ($hash.ToLowerInvariant())
         $scoop | Should -Match 'cmdpeek.cmd'
+        $scoop | Should -Match 'UnspokenMallard/cmdpeek/releases/download/9.9.9-test'
+        $winget | Should -Match 'UnspokenMallard/cmdpeek/releases/download/9.9.9-test'
         $scoop | Should -Not -Match 'extract_dir'
         $nuspec = Get-Content -LiteralPath (Join-Path (Join-Path $fake 'chocolatey') 'cmdpeek.nuspec') -Raw -Encoding UTF8
         $nuspec | Should -Match '<version>9.9.9-test</version>'
