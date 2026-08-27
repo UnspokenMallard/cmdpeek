@@ -44,7 +44,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 From GitHub once the repo is public:
 
 ```powershell
-irm https://raw.githubusercontent.com/cmdpeek/cmdpeek/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/UnspokenMallard/cmdpeek/main/install.ps1 | iex
 ```
 
 ### Scoop
@@ -64,7 +64,7 @@ choco install cmdpeek -s . -y
 
 ### WinGet
 
-The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https://github.com/microsoft/winget-pkgs). Pack a real installer with `.\scripts\New-CmdPeekReleaseArchive.ps1`; pushing a `v*` tag runs `.github/workflows/release.yml` and attaches the zip. Until that release exists, `InstallerSha256` hashes the mock payload in `examples/mocks/` and you should install with `install.ps1`.
+The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https://github.com/microsoft/winget-pkgs). Pack a real installer with `.\scripts\New-CmdPeekReleaseArchive.ps1`; pushing a `v*` or numeric tag (or running the release workflow with `attach_tag`) attaches the zip. Until that asset exists, `InstallerSha256` hashes the mock payload in `examples/mocks/` and you should install with `install.ps1`.
 
 ### First run with no package manager
 

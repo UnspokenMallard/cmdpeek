@@ -1,25 +1,21 @@
 {
   "version": "0.2.0",
   "description": "Show recently installed CLI commands and match tasks to tools you already have.",
-  "homepage": "https://github.com/cmdpeek/cmdpeek",
+  "homepage": "https://github.com/UnspokenMallard/cmdpeek",
   "license": "MIT",
   "notes": [
-    "Until a GitHub release zip exists, install from a local clone:",
-    "  scoop install .\\scoop\\cmdpeek.json",
-    "or use the standalone installer:  .\\install.ps1",
-    "Tag v* to run .github/workflows/release.yml, then run:",
-    "  .\\scripts\\New-CmdPeekReleaseArchive.ps1 -UpdateManifest",
-    "to write this file's url/hash from that zip."
+    "Install from a local clone with:  scoop install .\\scoop\\cmdpeek.json",
+    "or the standalone installer:  .\\install.ps1"
   ],
-  "url": "https://github.com/cmdpeek/cmdpeek/archive/refs/heads/main.zip",
+  "url": "https://github.com/UnspokenMallard/cmdpeek/archive/refs/heads/main.zip",
   "extract_dir": "cmdpeek-main",
   "bin": [
     ["src\\cmdpeek.ps1", "cmdpeek"]
   ],
   "checkver": {
-    "github": "https://github.com/cmdpeek/cmdpeek"
+    "github": "https://github.com/UnspokenMallard/cmdpeek"
   },
   "autoupdate": {
-    "url": "https://github.com/cmdpeek/cmdpeek/releases/download/v$version/cmdpeek-win-x64-v$version.zip"
+    "url": "https://github.com/UnspokenMallard/cmdpeek/releases/download/$version/cmdpeek-win-x64-v$version.zip"
   }
 }

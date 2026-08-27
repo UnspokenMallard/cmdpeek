@@ -67,7 +67,7 @@
         PSData = @{
             Tags         = @('windows', 'cli', 'scoop', 'chocolatey', 'winget', 'pipx', 'mcp', 'packages')
             LicenseUri   = 'https://opensource.org/licenses/MIT'
-            ProjectUri   = 'https://github.com/cmdpeek/cmdpeek'
+            ProjectUri   = 'https://github.com/UnspokenMallard/cmdpeek'
             ReleaseNotes = '0.2.0: task resolver (prefer installed), extra scanners, catalog overlay, MCP prompts/resources.'
         }
     }
