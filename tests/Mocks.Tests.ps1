@@ -108,6 +108,7 @@ Describe 'profile v1 upgrade' {
         $text = Get-Content -LiteralPath $dest -Raw -Encoding UTF8
         $text | Should -Match 'function pipx'
         $text | Should -Match 'function brew'
+        $text | Should -Match 'Register-CmdPeekHistoryTimestamp'
         $text | Should -Match 'Set-Alias ll'
         ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
         $text | Should -Not -Match '(?s)BEGIN cmdpeek hint.*BEGIN cmdpeek hint'

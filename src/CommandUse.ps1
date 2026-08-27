@@ -99,6 +99,80 @@ function Save-CmdPeekRustyLastUsed {
     ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $Path -Encoding UTF8
 }
 
+function Write-CmdPeekRustyLastUsedLine {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Line,
+        [string]$DataDirectory,
+        [string]$Path
+    )
+
+    $parsed = Split-CmdPeekHistoryLine -Line $Line
+    if (-not $parsed.Command) { return }
+    if (-not $Path) {
+        $Path = Get-CmdPeekRustyLastUsedPath -DataDirectory $DataDirectory
+    }
+    if (-not $Path) { return }
+    $map = Get-CmdPeekRustyLastUsedMap -Path $Path
+    $key = $parsed.Command.ToLowerInvariant()
+    $at = $parsed.LastUsedAt
+    if (-not $at) { $at = [datetime]::UtcNow }
+    $map[$key] = [pscustomobject]@{
+        LastUsedAt = $at
+        LastLine   = $parsed.Text
+    }
+    Save-CmdPeekRustyLastUsed -Path $Path -Entries $map
+}
+
+function Add-CmdPeekHistoryTimestamp {
+    [CmdletBinding()]
+    param(
+        [string]$DataDirectory,
+        [string]$LastUsedPath
+    )
+
+    if ($script:CmdPeekHistoryTimestampRegistered) { return }
+    if (-not (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue)) { return }
+
+    $previous = $null
+    try {
+        $opt = Get-PSReadLineOption -ErrorAction Stop
+        if ($opt.AddToHistoryHandler) {
+            $existing = [string]$opt.AddToHistoryHandler
+            if ($existing.Contains('Write-CmdPeekRustyLastUsedLine')) {
+                $script:CmdPeekHistoryTimestampRegistered = $true
+                return
+            }
+            $previous = $opt.AddToHistoryHandler
+        }
+    }
+    catch {
+        return
+    }
+
+    $dataDir = $DataDirectory
+    $usedPath = $LastUsedPath
+    Set-PSReadLineOption -AddToHistoryHandler {
+        param($line)
+        if ($previous) {
+            try {
+                $keep = & $previous $line
+                if ($keep -eq $false) { return $false }
+            }
+            catch { }
+        }
+        try {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-CmdPeekRustyLastUsedLine -Line $line -DataDirectory $dataDir -Path $usedPath
+            }
+        }
+        catch { }
+        return $true
+    }
+    $script:CmdPeekHistoryTimestampRegistered = $true
+}
+
 function Split-CmdPeekHistoryLine {
     param([string]$Line)
 
