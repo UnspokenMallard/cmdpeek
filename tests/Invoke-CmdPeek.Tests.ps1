@@ -826,6 +826,30 @@ Describe 'task resolver CLI' {
         $text | Should -Not -Match '(?m)\bjq\b'
     }
 
+    It 'writes an agent playbook of installed tools' {
+        $scoopRoot = Join-Path $TestDrive 'scoop-agent-export'
+        $app = Join-Path $scoopRoot 'apps\fd\current'
+        New-Item -ItemType Directory -Force -Path $app | Out-Null
+        '{"version":"10.2.0","bin":"fd.exe"}' | Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+        $outFile = Join-Path $TestDrive 'playbook.md'
+
+        $printed = Invoke-CmdPeek -AgentExport -AgentExportPath $outFile -NonInteractive `
+            -EnabledManagers @('scoop') `
+            -ScoopRoot $scoopRoot `
+            -ChocolateyRoot (Join-Path $TestDrive 'none-choco-agent-export') `
+            -WinGetRoot (Join-Path $TestDrive 'none-winget-agent-export') `
+            -DataDirectory (Join-Path $TestDrive 'agent-export-data') `
+            -ExamplesPath (Join-Path $PSScriptRoot '..\examples\usage-examples.json') `
+            -HistoryPath @()
+
+        ($printed | Out-String) | Should -Match 'Wrote'
+        Test-Path -LiteralPath $outFile | Should -BeTrue
+        $text = Get-Content -LiteralPath $outFile -Raw -Encoding UTF8
+        $text | Should -Match 'cmdpeek agent playbook'
+        $text | Should -Match '### fd \(scoop\)'
+        $text | Should -Match 'Find files'
+    }
+
     It 'explains an installed command with usages' {
         $scoopRoot = Join-Path $TestDrive 'scoop-explain'
         $app = Join-Path $scoopRoot 'apps\fd\current'

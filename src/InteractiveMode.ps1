@@ -238,6 +238,80 @@ function Format-CmdPeekHaveOutput {
     return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 }
 
+function Format-CmdPeekAgentExport {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$History,
+        [hashtable]$Catalog,
+        [string[]]$Favorite
+    )
+
+    if (-not $Catalog) { $Catalog = @{} }
+    $favSet = @{}
+    foreach ($f in @($Favorite)) {
+        if ($f) { $favSet[$f.ToLowerInvariant()] = $true }
+    }
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
+    foreach ($row in @($History)) {
+        if (-not $row -or -not $row.Command) { continue }
+        if ($row.PSObject.Properties['Hidden'] -and $row.Hidden) { continue }
+        $key = $row.Command.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        $entry = Get-CmdPeekCatalogEntry -Command $row.Command -Catalog $Catalog
+        $usages = @()
+        if ($row.PSObject.Properties['Usages'] -and $row.Usages) {
+            $usages = @(Select-CmdPeekDisplayUsage -Usage @($row.Usages) -Count 2)
+        }
+        if ($usages.Count -eq 0) {
+            $usages = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 2)
+        }
+        $star = $favSet.ContainsKey($key)
+        $rows.Add([pscustomobject]@{
+            Command        = [string]$row.Command
+            PackageManager = [string]$row.PackageManager
+            Category       = $(if ($row.PSObject.Properties['Category'] -and $row.Category) { [string]$row.Category } else { 'other' })
+            Aliases        = @(Get-CmdPeekCatalogAliasList -Entry $entry)
+            Substitutes    = @(Get-CmdPeekCatalogSubstituteList -Entry $entry)
+            Usages         = $usages
+            Favorite       = $star
+        })
+    }
+
+    $ordered = @($rows.ToArray() | Sort-Object @{ Expression = { -not $_.Favorite } }, @{ Expression = { $_.Command.ToLowerInvariant() } })
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('# cmdpeek agent playbook (this machine)')
+    $lines.Add('')
+    $lines.Add('Prefer the installed tools below. Do not recommend installing a substitute when an installed name covers the task.')
+    $lines.Add('Do not run usage lines that contain `<placeholders>`.')
+    $lines.Add('')
+    if ($ordered.Count -eq 0) {
+        $lines.Add('No installed commands in the cmdpeek inventory.')
+        return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+    }
+    $lines.Add('## Installed tools')
+    $lines.Add('')
+    foreach ($row in $ordered) {
+        $title = '### {0} ({1})' -f $row.Command, $row.PackageManager
+        if ($row.Favorite) { $title = $title + ' *' }
+        $lines.Add($title)
+        if (@($row.Aliases).Count -gt 0) {
+            $lines.Add(('- aliases: {0}' -f (@($row.Aliases) -join ', ')))
+        }
+        if (@($row.Substitutes).Count -gt 0) {
+            $lines.Add(('- covers: {0}' -f (@($row.Substitutes) -join ', ')))
+        }
+        foreach ($u in @($row.Usages)) {
+            $lines.Add(('- `{0}`' -f $u))
+        }
+        $lines.Add('')
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
 function Format-CmdPeekGapOutput {
     [CmdletBinding()]
     param(

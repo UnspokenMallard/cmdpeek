@@ -428,6 +428,20 @@ server.tool(
 );
 
 server.tool(
+  "export_agent_playbook",
+  "Return a markdown playbook of tools installed on this machine (names, aliases, substitutes, usages). Use this to prefer installed CLIs instead of suggesting new packages.",
+  async () => {
+    try {
+      const raw = await runCmdPeek(["agent-export"]);
+      return { content: [{ type: "text", text: raw }] };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
   "refresh_inventory",
   "Rescan package managers and PATH, bypass caches. Call this after installing or uninstalling a package, then call list_recent_commands.",
   async () => {
@@ -483,6 +497,19 @@ server.resource("last-install", "cmdpeek://last-install", async () => {
       {
         uri: "cmdpeek://last-install",
         mimeType: "application/json",
+        text: raw,
+      },
+    ],
+  };
+});
+
+server.resource("agent-export", "cmdpeek://agent-export", async () => {
+  const raw = await runCmdPeek(["agent-export"]);
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://agent-export",
+        mimeType: "text/markdown",
         text: raw,
       },
     ],

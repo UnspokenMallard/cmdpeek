@@ -12,6 +12,8 @@ When the user asks how to do something (search files, pretty-print JSON, downloa
 3. Only then mention catalog-missing tools with their install command
 
 When explaining a specific CLI, call get_command or explain_command. Catalog-only names are allowed.
+
+For a durable per-machine cheat sheet, read cmdpeek://agent-export or call export_agent_playbook.
 `;
 
 export function normalize(value: string | undefined): string {

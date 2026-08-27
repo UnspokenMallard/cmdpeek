@@ -16,10 +16,12 @@ Prefer MCP tools when the cmdpeek server is configured. Otherwise run the same i
 2. For a task: `resolve_task` **before** suggesting a new package (CLI: `cmdpeek for json`).
 3. Prefer **installed** matches. Do not recommend `ripgrep` if `rg` is present, or `fx` if `jq` is present.
 4. Explain a binary with `explain_command` / `get_command` (CLI: `cmdpeek explain fd` or `cmdpeek fd`). Catalog-only names are allowed.
-5. Never execute usage lines that contain `<placeholders>` or `usageDetails.unsafe=true`.
+5. For a durable per-machine cheat sheet: `cmdpeek agent-export` (MCP: `export_agent_playbook` / `cmdpeek://agent-export`).
+6. Never execute usage lines that contain `<placeholders>` or `usageDetails.unsafe=true`.
 
 ## Resources
 
 - `cmdpeek://recent` — just-installed envelope
 - `cmdpeek://last-install` — last delta written after a peek
 - `cmdpeek://inventory` / `cmdpeek://gaps`
+- `cmdpeek://agent-export` — markdown playbook of installed tools on this machine
