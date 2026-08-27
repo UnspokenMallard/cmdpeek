@@ -112,6 +112,21 @@ Describe 'Add-CmdPeekProfileHint' {
         $text | Should -Match 'function winget'
         $text | Should -Match 'function pipx'
         $text | Should -Match 'function cargo'
+        $text | Should -Match 'Register-CmdPeekHistoryTimestamp'
+        $text | Should -Match 'Add-CmdPeekHistoryTimestamp'
+        ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
+    }
+
+    It 'upgrades a pipx-era hint that lacks history timestamps' {
+        $profilePath = Join-Path $TestDrive 'pipx-only-profile.ps1'
+        @'
+# BEGIN cmdpeek hint
+function pipx { }
+# END cmdpeek hint
+'@ | Set-Content -LiteralPath $profilePath -Encoding UTF8
+        Add-CmdPeekProfileHint -ProfilePath $profilePath
+        $text = Get-Content -LiteralPath $profilePath -Raw -Encoding UTF8
+        $text | Should -Match 'Register-CmdPeekHistoryTimestamp'
         ([regex]::Matches($text, 'BEGIN cmdpeek hint')).Count | Should -Be 1
     }
 

@@ -57,6 +57,14 @@ Describe 'Get-CmdPeekRusty' {
         $sidecar | Should -Not -Match 'examples'
     }
 
+    It 'writes one command into the rusty sidecar from a history line' {
+        $sidecar = Join-Path $TestDrive 'live-ts\rusty-last-used.json'
+        Write-CmdPeekRustyLastUsedLine -Line 'jq ''.name'' notes.json' -Path $sidecar
+        $raw = Get-Content -LiteralPath $sidecar -Raw -Encoding UTF8 | ConvertFrom-Json
+        ([datetime]$raw.commands.jq.lastUsedAt).Year | Should -BeGreaterThan 2020
+        [string]$raw.commands.jq.lastLine | Should -Match 'notes.json'
+    }
+
     It 'does not write a sidecar unless PersistLastUsed is set' {
         $path = Join-Path $TestDrive 'hist-nopersist.txt'
         '2026-03-02T14:11:00Z jq .' | Set-Content -LiteralPath $path -Encoding UTF8

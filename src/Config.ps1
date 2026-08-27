@@ -286,6 +286,29 @@ function brew {
     & $app.Source @args
     if ($args.Count -ge 1 -and $args[0] -eq 'install') { Invoke-CmdPeekHint }
 }
+function Register-CmdPeekHistoryTimestamp {
+    if (-not (Get-Command Add-CmdPeekHistoryTimestamp -ErrorAction SilentlyContinue)) {
+        $localApp = $env:LOCALAPPDATA
+        if (-not $localApp) {
+            if ($env:XDG_DATA_HOME) { $localApp = $env:XDG_DATA_HOME }
+            elseif ($HOME) { $localApp = Join-Path $HOME '.local/share' }
+        }
+        if ($localApp) {
+            $modDir = Join-Path $localApp 'cmdpeek'
+            $psd1 = Join-Path (Join-Path $modDir 'module') 'cmdpeek.psd1'
+            if (Test-Path -LiteralPath $psd1) {
+                Import-Module $psd1 -ErrorAction SilentlyContinue
+            }
+        }
+        if (-not (Get-Command Add-CmdPeekHistoryTimestamp -ErrorAction SilentlyContinue)) {
+            Import-Module cmdpeek -ErrorAction SilentlyContinue
+        }
+    }
+    if (Get-Command Add-CmdPeekHistoryTimestamp -ErrorAction SilentlyContinue) {
+        Add-CmdPeekHistoryTimestamp
+    }
+}
+Register-CmdPeekHistoryTimestamp
 # END cmdpeek hint
 '@
 
@@ -297,10 +320,10 @@ function brew {
     $existing = ''
     if (Test-Path -LiteralPath $ProfilePath) {
         $existing = Get-Content -LiteralPath $ProfilePath -Raw -Encoding UTF8
-        if ($existing -and $existing.Contains($marker) -and $existing.Contains('function pipx')) {
+        if ($existing -and $existing.Contains($marker) -and $existing.Contains('Register-CmdPeekHistoryTimestamp')) {
             return
         }
-        if ($existing -and $existing.Contains($marker) -and -not $existing.Contains('function pipx')) {
+        if ($existing -and $existing.Contains($marker) -and -not $existing.Contains('Register-CmdPeekHistoryTimestamp')) {
             $start = $existing.IndexOf('# BEGIN cmdpeek hint')
             $endMarker = '# END cmdpeek hint'
             $end = $existing.IndexOf($endMarker)
