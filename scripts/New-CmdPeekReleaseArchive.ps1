@@ -86,13 +86,45 @@ $info = @{
 ($info | ConvertTo-Json -Depth 4) | Set-Content -LiteralPath $infoPath -Encoding UTF8
 
 if ($UpdateManifest) {
+    $url = $info.installerUrl
+    $hashLower = $hash.ToLowerInvariant()
+
     $manifest = Join-Path (Join-Path $RepoRoot 'winget') 'manifest.yaml'
     if (Test-Path -LiteralPath $manifest) {
         $text = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8
         $text = [regex]::Replace($text, '(?m)^PackageVersion:\s*.*$', ('PackageVersion: {0}' -f $Version))
-        $text = [regex]::Replace($text, '(?m)^    InstallerUrl:\s*.*$', ('    InstallerUrl: {0}' -f $info.installerUrl))
+        $text = [regex]::Replace($text, '(?m)^    InstallerUrl:\s*.*$', ('    InstallerUrl: {0}' -f $url))
         $text = [regex]::Replace($text, '(?m)^    InstallerSha256:\s*.*$', ('    InstallerSha256: {0}' -f $hash))
         Set-Content -LiteralPath $manifest -Value $text -Encoding UTF8
+    }
+
+    $scoopPath = Join-Path (Join-Path $RepoRoot 'scoop') 'cmdpeek.json'
+    if (Test-Path -LiteralPath $scoopPath) {
+        $scoop = Get-Content -LiteralPath $scoopPath -Raw -Encoding UTF8
+        $scoop = [regex]::Replace($scoop, '(?m)^  "version":\s*"[^"]*"', ('  "version": "{0}"' -f $Version))
+        $urlPattern = '(?m)^  "url":\s*"[^"]*"\s*,?'
+        if ($scoop -match '(?m)^  "hash":\s*"') {
+            $scoop = [regex]::Replace($scoop, $urlPattern, ('  "url": "{0}",' -f $url))
+            $scoop = [regex]::Replace($scoop, '(?m)^  "hash":\s*"[^"]*"\s*,?', ('  "hash": "{0}",' -f $hashLower))
+        }
+        else {
+            $scoop = [regex]::Replace($scoop, $urlPattern, ('  "url": "{0}",{1}  "hash": "{2}",' -f $url, [Environment]::NewLine, $hashLower))
+        }
+        $scoop = [regex]::Replace($scoop, '(?m)^\s*"extract_dir":\s*"[^"]*"\s*,?\s*(\r?\n)?', '')
+        if ($scoop -match '(?m)^  "bin":\s*"') {
+            $scoop = [regex]::Replace($scoop, '(?m)^  "bin":\s*"[^"]*"', '  "bin": "cmdpeek.cmd"')
+        }
+        else {
+            $scoop = [regex]::Replace($scoop, '(?s)"bin":\s*\[\s*\[[^\]]*\]\s*\]', '"bin": "cmdpeek.cmd"')
+        }
+        Set-Content -LiteralPath $scoopPath -Value $scoop -Encoding UTF8
+    }
+
+    $nuspec = Join-Path (Join-Path $RepoRoot 'chocolatey') 'cmdpeek.nuspec'
+    if (Test-Path -LiteralPath $nuspec) {
+        $choco = Get-Content -LiteralPath $nuspec -Raw -Encoding UTF8
+        $choco = [regex]::Replace($choco, '<version>[^<]*</version>', ('<version>{0}</version>' -f $Version))
+        Set-Content -LiteralPath $nuspec -Value $choco -Encoding UTF8
     }
 }
 
