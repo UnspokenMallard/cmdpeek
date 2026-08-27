@@ -2,14 +2,14 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>cmdpeek</id>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <title>cmdpeek</title>
     <authors>cmdpeek contributors</authors>
     <owners>cmdpeek</owners>
     <licenseUrl>https://opensource.org/licenses/MIT</licenseUrl>
     <projectUrl>https://github.com/cmdpeek/cmdpeek</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Show the most recently installed CLI commands from Chocolatey, Scoop, and WinGet, with common usage examples.</description>
+    <description>Show the most recently installed CLI commands, match tasks to tools you already have, and attach usage examples.</description>
     <summary>Recently installed commands + how to use them.</summary>
     <tags>cli powershell scoop winget chocolatey packages</tags>
   </metadata>

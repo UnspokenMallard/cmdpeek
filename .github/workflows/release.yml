@@ -16,7 +16,26 @@ jobs:
       - name: Build portable zip
         shell: pwsh
         run: |
-          ./scripts/New-CmdPeekReleaseArchive.ps1 -OutputDirectory ./dist
+          ./scripts/New-CmdPeekReleaseArchive.ps1 -OutputDirectory ./dist -UpdateManifest
+          Copy-Item ./scoop/cmdpeek.json ./dist/ -Force
+          Copy-Item ./winget/manifest.yaml ./dist/ -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cmdpeek-win-x64
+          path: |
+            dist/*.zip
+            dist/*.json
+            dist/manifest.yaml
+      - name: Attach zip to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.json
+            dist/manifest.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
           name: cmdpeek-win-x64
