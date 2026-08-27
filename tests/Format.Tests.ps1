@@ -140,3 +140,38 @@ Describe 'Format-CmdPeekQuickOutput' {
         $text | Should -Match 'last used: 2026-03-02'
     }
 }
+
+Describe 'Format-CmdPeekAgentExport' {
+    It 'lists installed tools with aliases, substitutes, and usages' {
+        $catalog = @{
+            'jq' = [pscustomobject]@{
+                category    = 'dev-tools'
+                aliases     = @('gojq')
+                substitutes = @('fx')
+                usages      = @('jq . file.json  # pretty-print')
+            }
+        }
+        $history = @(
+            [pscustomobject]@{
+                Command        = 'jq'
+                PackageManager = 'scoop'
+                Category       = 'dev-tools'
+                Usages         = @('jq . file.json  # pretty-print')
+                Hidden         = $false
+            }
+            [pscustomobject]@{
+                Command        = 'secret'
+                PackageManager = 'scoop'
+                Hidden         = $true
+                Usages         = @('secret --help')
+            }
+        )
+        $text = Format-CmdPeekAgentExport -History $history -Catalog $catalog -Favorite @('jq')
+        $text | Should -Match 'cmdpeek agent playbook'
+        $text | Should -Match '### jq \(scoop\) \*'
+        $text | Should -Match 'aliases: gojq'
+        $text | Should -Match 'covers: fx'
+        $text | Should -Match 'pretty-print'
+        $text | Should -Not -Match 'secret'
+    }
+}

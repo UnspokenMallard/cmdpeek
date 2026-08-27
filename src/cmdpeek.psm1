@@ -64,7 +64,9 @@ function Invoke-CmdPeek {
         [string]$AptStatusPath,
         [string]$PacmanRoot,
         [string]$LastUsedPath,
-        [scriptblock]$OpenAiRunner
+        [scriptblock]$OpenAiRunner,
+        [switch]$AgentExport,
+        [string]$AgentExportPath
     )
 
     if ($Recent) {
@@ -74,7 +76,7 @@ function Invoke-CmdPeek {
     if ($Json -or $Gaps -or $HumanGaps) {
         $NonInteractive = $true
     }
-    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have) {
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $AgentExport) {
         $NonInteractive = $true
     }
     if ($LastInstall) {
@@ -87,12 +89,12 @@ function Invoke-CmdPeek {
     $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
     if ($NonInteractive) { $useInteractive = $false }
     if ($Rusty -and -not $Interactive) { $useInteractive = $false }
-    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps) { $useInteractive = $false }
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
     $isRecencyPath = [bool]$Recent -or (
-        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and (
+        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and -not $AgentExport -and (
             $Count -gt 0 -or (-not $Search -and -not $Category)
         )
     )
@@ -266,6 +268,21 @@ function Invoke-CmdPeek {
         else {
             Write-Output (Format-CmdPeekHaveOutput -History $haveRows)
         }
+        return
+    }
+
+    if ($AgentExport) {
+        $markdown = Format-CmdPeekAgentExport -History $history -Catalog $catalog -Favorite @($state.Favorites)
+        if ($AgentExportPath) {
+            $parent = Split-Path -Parent $AgentExportPath
+            if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+                New-Item -ItemType Directory -Path $parent -Force | Out-Null
+            }
+            Set-Content -LiteralPath $AgentExportPath -Value $markdown -Encoding UTF8
+            Write-Output ('Wrote {0}' -f $AgentExportPath)
+            return
+        }
+        Write-Output $markdown
         return
     }
 
@@ -618,6 +635,9 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekOpenAiExample'
     'Get-CmdPeekRustyLastUsedPath'
     'Save-CmdPeekRustyLastUsed'
+    'Write-CmdPeekRustyLastUsedLine'
+    'Add-CmdPeekHistoryTimestamp'
     'Get-CmdPeekDefaultUnixRoot'
     'Format-CmdPeekGapOutput'
+    'Format-CmdPeekAgentExport'
 )

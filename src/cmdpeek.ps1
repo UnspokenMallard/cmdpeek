@@ -75,6 +75,10 @@ param(
 
     [switch]$LastInstall,
 
+    [switch]$AgentExport,
+
+    [string]$AgentExportPath,
+
     [switch]$Help
 )
 
@@ -94,6 +98,8 @@ Usage:
   cmdpeek for json        Installed tools first, then catalog installs
   cmdpeek why jq          Why this tool, PATH winner, substitutes
   cmdpeek have [cap]      Installed catalog tools you can use
+  cmdpeek agent-export    Markdown playbook of installed tools for agents
+  cmdpeek agent-export FILE   Write that playbook to FILE
   cmdpeek gaps            Human-readable inventory gaps
   cmdpeek rusty           Installed tools missing from recent history
   cmdpeek search-available fzf   Catalog + optional package-manager search
@@ -164,6 +170,10 @@ elseif ($verb -eq 'have') {
 elseif ($verb -eq 'search-available') {
     $invoke.SearchAvailable = $rest
 }
+elseif ($verb -eq 'agent-export') {
+    $invoke.AgentExport = $true
+    if ($rest) { $invoke.AgentExportPath = $rest }
+}
 elseif ($PSBoundParameters.ContainsKey('Count') -and $Count -gt 0) {
     $invoke.Count = $Count
 }
@@ -173,7 +183,7 @@ elseif ($Argument -and $Argument -match '^\d+$') {
 
 if ($Interactive) { $invoke.Interactive = $true }
 if ($Search) { $invoke.Search = $Search }
-elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'have', 'search-available')) {
+elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'have', 'search-available', 'agent-export')) {
     $invoke.Search = $Argument
 }
 if ($Category) { $invoke.Category = $Category }
@@ -199,5 +209,7 @@ if ($Have) { $invoke.Have = $true }
 if ($Capability) { $invoke.Capability = $Capability }
 if ($Refresh) { $invoke.Refresh = $true }
 if ($LastInstall) { $invoke.LastInstall = $true }
+if ($AgentExport) { $invoke.AgentExport = $true }
+if ($AgentExportPath) { $invoke.AgentExportPath = $AgentExportPath }
 
 Invoke-CmdPeek @invoke

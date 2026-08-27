@@ -54,8 +54,11 @@
         'Get-CmdPeekOpenAiExample'
         'Get-CmdPeekRustyLastUsedPath'
         'Save-CmdPeekRustyLastUsed'
+        'Write-CmdPeekRustyLastUsedLine'
+        'Add-CmdPeekHistoryTimestamp'
         'Get-CmdPeekDefaultUnixRoot'
         'Format-CmdPeekGapOutput'
+        'Format-CmdPeekAgentExport'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

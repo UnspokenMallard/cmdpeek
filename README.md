@@ -53,7 +53,7 @@ irm https://raw.githubusercontent.com/cmdpeek/cmdpeek/main/install.ps1 | iex
 scoop install .\scoop\cmdpeek.json
 ```
 
-After the GitHub repo exists you can add a bucket and `scoop install cmdpeek`.
+After the GitHub repo exists you can add a bucket and `scoop install cmdpeek`. Tag `v*` to build a portable zip; `.\scripts\New-CmdPeekReleaseArchive.ps1 -UpdateManifest` writes this file's `url`/`hash` from that zip.
 
 ### Chocolatey
 
@@ -89,6 +89,7 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
 | `cmdpeek for json` | **Installed tools first**, then catalog tools to install |
 | `cmdpeek why jq` | Why this tool exists here: managers, PATH winner, substitutes |
 | `cmdpeek have search` | Installed catalog tools you can already use (optional capability) |
+| `cmdpeek agent-export` | Markdown playbook of this machine's installed tools (for agents) |
 | `cmdpeek search-available fzf` | Catalog search (installed vs missing + install commands) |
 | `cmdpeek gaps` | Human-readable gaps |
 | `cmdpeek -Category media` | Filter by catalog category |
@@ -181,9 +182,10 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | `set_hidden` | Hide/unhide a command from `-n` |
 | `set_favorite` | Star/unstar a command |
 | `install_package` | Dry-run install command (set `execute` only with consent) |
+| `export_agent_playbook` | Markdown playbook of installed tools (prefer these over new packages) |
 | `refresh_inventory` | Rescan after install/uninstall (bypasses cache) |
 
-Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://recent`, `cmdpeek://last-install`.
+Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://recent`, `cmdpeek://last-install`, `cmdpeek://agent-export`.
 
 Prompts: `after_install`, `prefer_installed`.
 
@@ -215,7 +217,7 @@ Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
 ## Data and privacy
 
-State lives in `%LOCALAPPDATA%\cmdpeek\state.json` (favorites, commands hidden from `-n`, preferred package manager, last scan). `state.json` does not include telemetry or example-use counters; those unused fields are ignored if an older file still has them. Rusty last-used dates are stored next to it in `rusty-last-used.json` (PSReadLine history has no timestamps; optional ISO prefixes on history lines are merged into this sidecar on `-Rusty` and empty-delta `-n`).
+State lives in `%LOCALAPPDATA%\cmdpeek\state.json` (favorites, commands hidden from `-n`, preferred package manager, last scan). `state.json` does not include telemetry or example-use counters; those unused fields are ignored if an older file still has them. Rusty last-used dates are stored next to it in `rusty-last-used.json`. Stock PSReadLine history has no timestamps; `Add-CmdPeekProfileHint` registers a PSReadLine `AddToHistoryHandler` that writes last-used dates into that sidecar as you type. Optional ISO prefixes on history lines are still merged on `-Rusty` and empty-delta `-n`.
 
 Optional AI examples: set `CMDPEEK_OPENAI_API_KEY` to call OpenAI chat completions when catalog, `--help`, tldr, and the local cache have no usages. Completions are written to `%LOCALAPPDATA%\cmdpeek\openai-examples.json`. Set `CMDPEEK_OPENAI_MOCK_PATH` (for example `examples/mocks/openai-examples.json`) to serve canned usages and skip the network. `CMDPEEK_OPENAI_MODEL` defaults to `gpt-4o-mini`. Tests inject `-HttpRunner` / `-OpenAiRunner` and never call the live API. tldr pages are used as an optional local fallback when a command has no catalog examples.
 
@@ -227,7 +229,7 @@ Optional AI examples: set `CMDPEEK_OPENAI_API_KEY` to call OpenAI chat completio
 Add-CmdPeekProfileHint -ProfilePath $PROFILE
 ```
 
-The wrappers call the real `scoop`/`choco`/`winget`/`pipx`/`npm`/`cargo`/`brew` executables, then `cmdpeek -NonInteractive -n 1` after an install (`npm` only for `npm install -g`). Re-running the helper is a no-op if the snippet is already present.
+The wrappers call the real `scoop`/`choco`/`winget`/`pipx`/`npm`/`cargo`/`brew` executables, then `cmdpeek -NonInteractive -n 1` after an install (`npm` only for `npm install -g`). The same snippet registers `Add-CmdPeekHistoryTimestamp` so typed commands update `rusty-last-used.json`. Re-running the helper upgrades an older hint block in place and is a no-op when the current snippet is already present.
 
 Optional user catalog overlay: `%LOCALAPPDATA%\cmdpeek\catalog.overlay.json` (see `examples/catalog.overlay.example.json`).
 
@@ -239,6 +241,7 @@ Invoke-Pester -Path .\tests
 .\src\cmdpeek.ps1 -NonInteractive -n 5
 .\src\cmdpeek.ps1 -Json
 .\scripts\New-CmdPeekReleaseArchive.ps1 -OutputDirectory .\dist
+.\scripts\New-CmdPeekReleaseArchive.ps1 -OutputDirectory .\dist -UpdateManifest
 cd mcp; npm install; npm run build
 ```
 
