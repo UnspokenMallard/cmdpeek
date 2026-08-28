@@ -8,6 +8,7 @@ Shipped in this branch: catalog capabilities/aliases/substitutes/install IDs, ov
 - [x] WinGet/Scoop pack script — `New-CmdPeekReleaseArchive.ps1 -UpdateManifest` writes zip SHA256 into Scoop/WinGet/Chocolatey; release workflow runs on `v*` or numeric tags and `workflow_dispatch` `attach_tag`
 - [x] Profile snippet upgrade — `Add-CmdPeekProfileHint` replaces older blocks in place (including timestamp registration)
 - [x] `cmdpeek agent-export` — markdown playbook of installed tools; MCP `export_agent_playbook` / `cmdpeek://agent-export`
+- [x] System command hub — catalog origin/os/shell/gotchas, curated Windows/POSIX/cmdlet entries, PATH/System32 enumerator, synonym ranking, command cards, learned overlay, TUI system view, `compare` / `suggest`
 
 Still not live:
 

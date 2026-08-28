@@ -169,22 +169,68 @@ function Get-CmdPeekBrewPackage {
     return @($packages)
 }
 
+function Get-CmdPeekSystemBinDenyName {
+    [CmdletBinding()]
+    param()
+
+    return @(
+        'notepad', 'calc', 'mspaint', 'write', 'wordpad', 'explorer', 'dwm', 'winlogon',
+        'csrss', 'smss', 'services', 'lsass', 'svchost', 'taskmgr', 'mmc', 'rundll32',
+        'dllhost', 'conhost', 'werfault', 'wermgr', 'searchindexer', 'runtimebroker',
+        'applicationframehost', 'systemsettings', 'wscript', 'cscript', 'mshta', 'hh',
+        'help', 'winver', 'logoff', 'userinit', 'splwow64', 'fontdrvhost', 'sihost',
+        'ctffmon', 'tabtip', 'textinputhost', 'control', 'regedt32', 'msiexec',
+        'searchhost', 'startmenuexperiencehost', 'shellexperiencehost', 'securityhealthsystray'
+    )
+}
+
+function Get-CmdPeekDefaultSystemBinRoot {
+    [CmdletBinding()]
+    param()
+
+    $roots = New-Object System.Collections.Generic.List[string]
+    $os = 'linux'
+    if (Get-Command Get-CmdPeekCurrentOs -ErrorAction SilentlyContinue) {
+        $os = Get-CmdPeekCurrentOs
+    }
+    elseif ($env:OS -eq 'Windows_NT') {
+        $os = 'windows'
+    }
+    if ($os -eq 'windows') {
+        $sys = $env:SystemRoot
+        if (-not $sys) { $sys = $env:WINDIR }
+        if ($sys) {
+            $roots.Add((Join-Path $sys 'System32'))
+        }
+    }
+    else {
+        foreach ($dir in @('/bin', '/usr/bin', '/usr/sbin')) {
+            if (Test-Path -LiteralPath $dir) { $roots.Add($dir) }
+        }
+    }
+    return @($roots)
+}
+
 function Add-CmdPeekPathCommands {
     [CmdletBinding()]
     param(
         [AllowEmptyCollection()]
         [object[]]$History,
         [hashtable]$Catalog,
-        [scriptblock]$CommandTester
+        [scriptblock]$CommandTester,
+        [switch]$IncludeSystemDirectories,
+        [string[]]$BinRoot,
+        [int]$UnknownLimit = 40
     )
 
-    if (-not $Catalog) { return @($History) }
+    if (-not $Catalog) { $Catalog = @{} }
     $existing = @{}
     foreach ($row in @($History)) {
         if ($row -and $row.Command) {
             foreach ($name in @(Get-CmdPeekCommandNamesFor -Command $row.Command -Catalog $Catalog)) {
                 $existing[$name.ToLowerInvariant()] = $true
             }
+            $existing[$row.Command.ToLowerInvariant()] = $true
         }
     }
 
@@ -197,27 +243,141 @@ function Add-CmdPeekPathCommands {
 
     $extra = New-Object System.Collections.Generic.List[object]
     foreach ($key in @($Catalog.Keys)) {
+        $lk = $key.ToLowerInvariant()
+        if ($existing.ContainsKey($lk)) { continue }
         $names = @(Get-CmdPeekCommandNamesFor -Command $key -Catalog $Catalog)
         $foundName = $null
         foreach ($name in $names) {
-            if ($existing.ContainsKey($name.ToLowerInvariant())) { $foundName = $null; break }
+            if ($existing.ContainsKey($name.ToLowerInvariant()) -and $name.ToLowerInvariant() -ne $lk) {
+                continue
+            }
             $visible = $false
             try { $visible = [bool](& $CommandTester $name) } catch { $visible = $false }
             if ($visible) { $foundName = $name; break }
         }
         if (-not $foundName) { continue }
+        $entry = $Catalog[$key]
+        $pm = 'path'
+        if (Get-Command Get-CmdPeekRowPackageManager -ErrorAction SilentlyContinue) {
+            $pm = Get-CmdPeekRowPackageManager -Entry $entry -Fallback 'path'
+        }
+        elseif ($entry -and $entry.PSObject.Properties['origin'] -and ([string]$entry.origin).ToLowerInvariant() -eq 'builtin') {
+            $pm = 'builtin'
+        }
+        $origin = 'path'
+        if (Get-Command Get-CmdPeekCatalogOrigin -ErrorAction SilentlyContinue) {
+            $origin = Get-CmdPeekCatalogOrigin -Entry $entry
+        }
         $existing[$foundName.ToLowerInvariant()] = $true
-        $existing[$key.ToLowerInvariant()] = $true
+        $existing[$lk] = $true
+        foreach ($alias in @($names)) {
+            $existing[$alias.ToLowerInvariant()] = $true
+        }
         $extra.Add([pscustomobject]@{
             Command        = $foundName
             PackageName    = $key
-            PackageManager = 'path'
+            PackageManager = $pm
             InstallDate    = [datetime]'2000-01-01'
             Version        = $null
             Favorite       = $false
             Hidden         = $false
             Category       = Get-CmdPeekCommandCategory -Command $key -Catalog $Catalog
+            Origin         = $origin
         })
+    }
+
+    $scanRoots = @()
+    if ($PSBoundParameters.ContainsKey('BinRoot') -and $null -ne $BinRoot) {
+        $scanRoots = @($BinRoot | Where-Object { $_ })
+    }
+    elseif ($IncludeSystemDirectories) {
+        $scanRoots = @(Get-CmdPeekDefaultSystemBinRoot)
+    }
+
+    if ($scanRoots.Count -gt 0) {
+        $deny = @{}
+        foreach ($n in @(Get-CmdPeekSystemBinDenyName)) { $deny[$n] = $true }
+        $unknown = New-Object System.Collections.Generic.List[object]
+        $seenFile = @{}
+        foreach ($root in $scanRoots) {
+            if (-not $root -or -not (Test-Path -LiteralPath $root)) { continue }
+            $files = @(Get-ChildItem -LiteralPath $root -File -ErrorAction SilentlyContinue)
+            foreach ($file in $files) {
+                $ext = ''
+                if ($file.Extension) { $ext = $file.Extension.ToLowerInvariant() }
+                if ($ext -in @('.dll', '.sys', '.cpl', '.msc', '.scr', '.drv', '.mui', '.xml', '.txt', '.ini', '.dat', '.pdb')) {
+                    continue
+                }
+                $ok = $false
+                if ($ext -in @('.exe', '.cmd', '.bat', '.com')) { $ok = $true }
+                elseif ([string]::IsNullOrWhiteSpace($ext)) { $ok = $true }
+                if (-not $ok) { continue }
+
+                $stem = Get-CmdPeekCommandStem -FileName $file.Name
+                if (-not $stem) { continue }
+                $sk = $stem.ToLowerInvariant()
+                if ($seenFile.ContainsKey($sk)) { continue }
+                $seenFile[$sk] = $true
+                if ($deny.ContainsKey($sk)) { continue }
+                if ($existing.ContainsKey($sk)) { continue }
+
+                if ($ext -eq '.exe' -and (Get-Command Get-CmdPeekPeSubsystem -ErrorAction SilentlyContinue)) {
+                    $sub = Get-CmdPeekPeSubsystem -Path $file.FullName
+                    if ($sub -eq 2) { continue }
+                }
+
+                $entry = $null
+                if (Get-Command Get-CmdPeekCatalogEntry -ErrorAction SilentlyContinue) {
+                    $entry = Get-CmdPeekCatalogEntry -Command $stem -Catalog $Catalog
+                }
+                if ($entry) {
+                    $canonical = $stem
+                    if (Get-Command Get-CmdPeekCanonicalCommand -ErrorAction SilentlyContinue) {
+                        $canonical = Get-CmdPeekCanonicalCommand -Command $stem -Catalog $Catalog
+                    }
+                    $clk = $canonical.ToLowerInvariant()
+                    if ($existing.ContainsKey($clk)) { continue }
+                    $pm = 'path'
+                    if (Get-Command Get-CmdPeekRowPackageManager -ErrorAction SilentlyContinue) {
+                        $pm = Get-CmdPeekRowPackageManager -Entry $entry -Fallback 'path'
+                    }
+                    $origin = 'path'
+                    if (Get-Command Get-CmdPeekCatalogOrigin -ErrorAction SilentlyContinue) {
+                        $origin = Get-CmdPeekCatalogOrigin -Entry $entry
+                    }
+                    $existing[$sk] = $true
+                    $existing[$clk] = $true
+                    $extra.Add([pscustomobject]@{
+                        Command        = $stem
+                        PackageName    = $canonical
+                        PackageManager = $pm
+                        InstallDate    = [datetime]'2000-01-01'
+                        Version        = $null
+                        Favorite       = $false
+                        Hidden         = $false
+                        Category       = Get-CmdPeekCommandCategory -Command $canonical -Catalog $Catalog
+                        Origin         = $origin
+                    })
+                    continue
+                }
+
+                if ($UnknownLimit -gt 0 -and $unknown.Count -ge $UnknownLimit) { continue }
+                $unknown.Add([pscustomobject]@{
+                    Command        = $stem
+                    PackageName    = $stem
+                    PackageManager = 'path'
+                    InstallDate    = [datetime]'2000-01-01'
+                    Version        = $null
+                    Favorite       = $false
+                    Hidden         = $false
+                    Category       = 'other'
+                    Origin         = 'path'
+                })
+                $existing[$sk] = $true
+            }
+        }
+        $unknownSorted = @($unknown.ToArray() | Sort-Object @{ Expression = { $_.Command.ToLowerInvariant() } })
+        foreach ($row in $unknownSorted) { $extra.Add($row) }
     }
 
     return @(@($History) + @($extra.ToArray()))

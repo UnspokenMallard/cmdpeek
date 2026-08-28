@@ -68,7 +68,7 @@ The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https
 
 ### First run with no package manager
 
-cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt`, and `pacman`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog command names already on PATH are inventoried.
+cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt`, and `pacman`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog names and curated OS builtins already on PATH are inventoried. System32 / `/bin` scans add extra console binaries (capped) that are not in the catalog.
 
 1. **Scoop** — user-level, recommended on Windows
 2. **Chocolatey** — typically needs an elevated shell
@@ -85,9 +85,11 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
 | `cmdpeek -Since 7d` | Time window for quick view / MCP: `last` (default), `all`, ISO datetime, `24h`, or `7d` (minutes not supported) |
 | `cmdpeek -Search rg` | Unique exact name: cheat sheet (usages + missing related). Otherwise search. |
 | `cmdpeek fd` | Unique command name: cheat sheet (usages, substitutes, install line). Otherwise search. |
-| `cmdpeek explain fd` | Same idea as the cheat sheet, plus PATH winner and substitutes |
-| `cmdpeek for json` | **Installed tools first**, then catalog tools to install |
-| `cmdpeek why jq` | Why this tool exists here: managers, PATH winner, substitutes |
+| `cmdpeek explain fd` | Command card: origin, gotchas, collisions, PATH winner, substitutes |
+| `cmdpeek for json` | **Installed tools first** (OS-aware), then catalog tools to install |
+| `cmdpeek why jq` | Why this tool exists here: origin, managers, PATH winner, substitutes |
+| `cmdpeek compare robocopy Copy-Item` | Side-by-side cards and which to prefer on this OS |
+| `cmdpeek suggest "ps aux"` | Map a command line to an installed equivalent |
 | `cmdpeek have search` | Installed catalog tools you can already use (optional capability) |
 | `cmdpeek agent-export` | Markdown playbook of this machine's installed tools (for agents) |
 | `cmdpeek search-available fzf` | Catalog search (installed vs missing + install commands) |
@@ -115,7 +117,7 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
                                           | > fd <pattern>                    # Find files
                                           |   fd -t f <pattern>               # Find files only
                                           | gaps: rg, fzf
-↑↓ move  ←→ pane  ↵ open/copy  / search  f fav  F favs  C cat  h hide  H hidden  g gaps  ? help  q quit
+↑↓ move  ←→ pane  ↵ open/copy  / search  f fav  F favs  C cat  h hide  H hidden  g gaps  u have  s system  ? help  q quit
 ```
 
 | Key | Action |
@@ -131,6 +133,7 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
 | h | Hide/unhide this command from `cmdpeek -n` quick view (still listed in the TUI) |
 | g | Gap view — related CLIs you do not have, and commands with only `--help` |
 | u | Use what you have — installed catalog tools by category / capability |
+| s | System commands — OS builtins and system-category tools |
 | c / r | Copy or run the highlighted usage (`<placeholders>` are copied, not run) |
 | a | Clear filters |
 | ? or F1 | Key help |
@@ -169,9 +172,11 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | --- | --- |
 | `list_recent_commands` | Recency envelope from `-Json -Recent` (usages, related, install commands, PATH) |
 | `search_commands` | Find a CLI by name, category, capability, or usage text |
-| `get_command` | Full detail for **installed or catalog-only** names |
-| `resolve_task` | Task → **installed first**, then missing catalog tools |
-| `explain_command` | Usages, PATH winner, substitutes, install lines |
+| `get_command` | Full detail for **installed or catalog-only** names (origin, gotchas, collisions) |
+| `resolve_task` | Task → **installed first** (OS-aware builtins), then missing catalog tools |
+| `explain_command` | Command card: usages, origin, gotchas, PATH winner, substitutes |
+| `compare_commands` | Side-by-side cards and which to prefer on this OS |
+| `suggest_for_argv` | Map a hallucinated or off-OS argv to an installed equivalent |
 | `search_available` | Catalog search with install commands |
 | `list_installed_for` | Installed tools for a capability |
 | `list_gaps` | Missing related, thin docs, not-on-path, shadowing (PATH winner), kit, category-neighbor |
@@ -181,15 +186,15 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | `list_hidden` | Commands hidden from `-n` |
 | `set_hidden` | Hide/unhide a command from `-n` |
 | `set_favorite` | Star/unstar a command |
-| `install_package` | Dry-run install command (set `execute` only with consent) |
+| `install_package` | Dry-run install command (set `execute` only with consent; refuses builtins) |
 | `export_agent_playbook` | Markdown playbook of installed tools (prefer these over new packages) |
 | `refresh_inventory` | Rescan after install/uninstall (bypasses cache) |
 
-Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://recent`, `cmdpeek://last-install`, `cmdpeek://agent-export`.
+Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://recent`, `cmdpeek://last-install`, `cmdpeek://agent-export`, `cmdpeek://system`.
 
-Prompts: `after_install`, `prefer_installed`.
+Prompts: `after_install`, `prefer_installed`, `prefer_system_then_installed`.
 
-Agents should call `resolve_task` before suggesting a new CLI, `refresh_inventory` + `list_recent_commands` after a package install, and must not run usages with `<placeholders>`.
+Agents should call `resolve_task` before suggesting a new CLI, prefer OS builtins on this machine, call `refresh_inventory` + `list_recent_commands` after a package install, and must not run usages with `<placeholders>`.
 
 ### Uninstall detection
 
@@ -211,7 +216,7 @@ Command 'yt-dlp' was uninstalled. Reinstall it? [Y/n/chocolatey/scoop/winget]
 | pipx / npm / cargo / brew | Isolated tool roots (`pipx` venvs, npm prefix, `~/.cargo/bin`, Homebrew Cellar) |
 | apt | `/var/lib/dpkg/status` (`install ok installed`) |
 | pacman | `/var/lib/pacman/local/*/desc` (`%NAME%`, `%VERSION%`, `%BUILDDATE%`) |
-| PATH | Catalog command names resolvable by `Get-Command` that no package manager claimed |
+| PATH | Catalog command names resolvable by `Get-Command` (builtins tagged `packageManager=builtin`) plus a capped System32/`/bin` scan of extra console binaries |
 
 Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
@@ -231,7 +236,7 @@ Add-CmdPeekProfileHint -ProfilePath $PROFILE
 
 The wrappers call the real `scoop`/`choco`/`winget`/`pipx`/`npm`/`cargo`/`brew` executables, then `cmdpeek -NonInteractive -n 1` after an install (`npm` only for `npm install -g`). The same snippet registers `Add-CmdPeekHistoryTimestamp` so typed commands update `rusty-last-used.json`. Re-running the helper upgrades an older hint block in place and is a no-op when the current snippet is already present.
 
-Optional user catalog overlay: `%LOCALAPPDATA%\cmdpeek\catalog.overlay.json` (see `examples/catalog.overlay.example.json`).
+Optional user catalog overlay: `%LOCALAPPDATA%\cmdpeek\catalog.overlay.json` (see `examples/catalog.overlay.example.json`). Help-probe examples for unknown PATH binaries are saved to `catalog.learned.json` in the same directory. Curated OS builtins live in `examples/system-commands.json`.
 
 ## Development
 

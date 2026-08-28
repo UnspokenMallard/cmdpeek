@@ -66,7 +66,10 @@ function Invoke-CmdPeek {
         [string]$LastUsedPath,
         [scriptblock]$OpenAiRunner,
         [switch]$AgentExport,
-        [string]$AgentExportPath
+        [string]$AgentExportPath,
+        [string]$Compare,
+        [string]$Suggest,
+        [string[]]$BinRoot
     )
 
     if ($Recent) {
@@ -76,7 +79,7 @@ function Invoke-CmdPeek {
     if ($Json -or $Gaps -or $HumanGaps) {
         $NonInteractive = $true
     }
-    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $AgentExport) {
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $AgentExport -or $Compare -or $Suggest) {
         $NonInteractive = $true
     }
     if ($LastInstall) {
@@ -89,12 +92,12 @@ function Invoke-CmdPeek {
     $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
     if ($NonInteractive) { $useInteractive = $false }
     if ($Rusty -and -not $Interactive) { $useInteractive = $false }
-    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport) { $useInteractive = $false }
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport -or $Compare -or $Suggest) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
     $isRecencyPath = [bool]$Recent -or (
-        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and -not $AgentExport -and (
+        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and -not $AgentExport -and -not $Compare -and -not $Suggest -and (
             $Count -gt 0 -or (-not $Search -and -not $Category)
         )
     )
@@ -201,7 +204,18 @@ function Invoke-CmdPeek {
     $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath -DataDirectory $DataDirectory
     $includePath = -not $PSBoundParameters.ContainsKey('EnabledManagers') -or (@($managerNames) -contains 'path')
     if ($includePath) {
-        $history = @(Add-CmdPeekPathCommands -History $history -Catalog $catalog -CommandTester $CommandTester)
+        $pathArgs = @{
+            History       = $history
+            Catalog       = $catalog
+            CommandTester = $CommandTester
+        }
+        if ($PSBoundParameters.ContainsKey('BinRoot')) {
+            $pathArgs.BinRoot = $BinRoot
+        }
+        else {
+            $pathArgs.IncludeSystemDirectories = $true
+        }
+        $history = @(Add-CmdPeekPathCommands @pathArgs)
     }
     $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -SkipHelpProbe)
 
@@ -210,6 +224,16 @@ function Invoke-CmdPeek {
     $history = @(Merge-CmdPeekHidden -History $history -Hidden @($state.Hidden))
 
     $missing = @(Find-CmdPeekMissingCommand -Previous @($state.Commands) -Current $history)
+    $missing = @(
+        $missing | Where-Object {
+            if (-not $_) { return $false }
+            $pm = ''
+            if ($_.PSObject.Properties['PackageManager'] -and $_.PackageManager) {
+                $pm = ([string]$_.PackageManager).ToLowerInvariant()
+            }
+            return ($pm -notin @('builtin', 'path'))
+        }
+    )
     if ($missing.Count -gt 0) {
         if ($useInteractive) {
             $state = Confirm-CmdPeekMissingCommand -Missing $missing -Managers $managers -State $state
@@ -245,6 +269,35 @@ function Invoke-CmdPeek {
         }
         else {
             Write-Output (Format-CmdPeekWhyOutput -Result $whyRow)
+        }
+        return
+    }
+
+    if ($Compare) {
+        $bits = @($Compare.Trim() -split '\s+', 3)
+        $left = $bits[0]
+        $right = $(if ($bits.Count -gt 1) { $bits[1] } else { '' })
+        if (-not $left -or -not $right) {
+            Write-Output "Usage: cmdpeek compare <command> <command>`n"
+            return
+        }
+        $cmp = Compare-CmdPeekCommand -Left $left -Right $right -History $history -Catalog $catalog -CommandTester $CommandTester
+        if ($Json) {
+            Write-Output ($cmp | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekCompareOutput -Result $cmp)
+        }
+        return
+    }
+
+    if ($Suggest) {
+        $sug = Get-CmdPeekArgvSuggestion -Argv $Suggest -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+        if ($Json) {
+            Write-Output ($sug | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekSuggestOutput -Result $sug)
         }
         return
     }
@@ -287,19 +340,20 @@ function Invoke-CmdPeek {
     }
 
     if ($Explain) {
-        $whyRow = Get-CmdPeekWhyCommand -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+        $card = Get-CmdPeekCommandCard -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
         $exact = @(Select-CmdPeekExactCommand -History $history -Query $Explain)
         if ($exact.Count -eq 1) {
             $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
             if ($probed.Count -gt 0 -and $probed[0].PSObject.Properties['Usages']) {
-                $whyRow.usages = @($probed[0].Usages)
+                $card.usages = @($probed[0].Usages)
+                $card.usageDetails = @(ConvertTo-CmdPeekStructuredUsage -Usage @($probed[0].Usages))
             }
         }
         if ($Json) {
-            Write-Output ($whyRow | ConvertTo-Json -Depth 8)
+            Write-Output ($card | ConvertTo-Json -Depth 8)
         }
         else {
-            Write-Output (Format-CmdPeekWhyOutput -Result $whyRow)
+            Write-Output (Format-CmdPeekWhyOutput -Result $card)
         }
         return
     }
@@ -640,4 +694,11 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekDefaultUnixRoot'
     'Format-CmdPeekGapOutput'
     'Format-CmdPeekAgentExport'
+    'Get-CmdPeekCommandCard'
+    'Compare-CmdPeekCommand'
+    'Get-CmdPeekArgvSuggestion'
+    'Get-CmdPeekSystemList'
+    'Test-CmdPeekCatalogIsBuiltin'
+    'Get-CmdPeekCurrentOs'
+    'Save-CmdPeekLearnedCatalogEntry'
 )

@@ -79,6 +79,10 @@ param(
 
     [string]$AgentExportPath,
 
+    [string]$Compare,
+
+    [string]$Suggest,
+
     [switch]$Help
 )
 
@@ -94,9 +98,11 @@ Usage:
   cmdpeek -n 5            Same as cmdpeek 5
   cmdpeek recent          Same as cmdpeek 5
   cmdpeek fd              Cheat sheet if that name is unique; else search
-  cmdpeek explain fd      Cheat sheet plus install/substitute notes
+  cmdpeek explain fd      Cheat sheet plus origin, gotchas, substitutes
   cmdpeek for json        Installed tools first, then catalog installs
   cmdpeek why jq          Why this tool, PATH winner, substitutes
+  cmdpeek compare robocopy Copy-Item   Side-by-side command cards
+  cmdpeek suggest "ps aux"             Map a command line to an installed equivalent
   cmdpeek have [cap]      Installed catalog tools you can use
   cmdpeek agent-export    Markdown playbook of installed tools for agents
   cmdpeek agent-export FILE   Write that playbook to FILE
@@ -120,7 +126,7 @@ Keys in interactive TUI:
   Arrows move     Tab/←→ pane     Enter open or copy
   / search        f favorite      F favorites only
   C category      h hide from -n  H hidden only
-  g gaps          u use-what-you-have
+  g gaps          u use-what-you-have   s system commands
   ? help          Esc back        q quit
 '@ | Write-Output
     exit 0
@@ -174,7 +180,13 @@ elseif ($verb -eq 'agent-export') {
     $invoke.AgentExport = $true
     if ($rest) { $invoke.AgentExportPath = $rest }
 }
-elseif ($PSBoundParameters.ContainsKey('Count') -and $Count -gt 0) {
+    elseif ($verb -eq 'compare') {
+        $invoke.Compare = $rest
+    }
+    elseif ($verb -eq 'suggest') {
+        $invoke.Suggest = $rest
+    }
+    elseif ($PSBoundParameters.ContainsKey('Count') -and $Count -gt 0) {
     $invoke.Count = $Count
 }
 elseif ($Argument -and $Argument -match '^\d+$') {
@@ -183,7 +195,7 @@ elseif ($Argument -and $Argument -match '^\d+$') {
 
 if ($Interactive) { $invoke.Interactive = $true }
 if ($Search) { $invoke.Search = $Search }
-elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'have', 'search-available', 'agent-export')) {
+elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'have', 'search-available', 'agent-export', 'compare', 'suggest')) {
     $invoke.Search = $Argument
 }
 if ($Category) { $invoke.Category = $Category }
@@ -211,5 +223,7 @@ if ($Refresh) { $invoke.Refresh = $true }
 if ($LastInstall) { $invoke.LastInstall = $true }
 if ($AgentExport) { $invoke.AgentExport = $true }
 if ($AgentExportPath) { $invoke.AgentExportPath = $AgentExportPath }
+if ($Compare) { $invoke.Compare = $Compare }
+if ($Suggest) { $invoke.Suggest = $Suggest }
 
 Invoke-CmdPeek @invoke

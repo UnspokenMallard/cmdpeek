@@ -60,6 +60,30 @@ Describe 'language and PATH scanners' {
         $merged.Command | Should -Contain 'jq'
         @($merged | Where-Object { $_.Command -eq 'jq' })[0].PackageManager | Should -Be 'path'
     }
+
+    It 'tags catalog builtins as builtin instead of path' {
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'
+                usages = @('tasklist'); install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $merged = @(Add-CmdPeekPathCommands -History @() -Catalog $catalog -CommandTester { param($n) $n -eq 'tasklist' })
+        @($merged | Where-Object { $_.Command -eq 'tasklist' })[0].PackageManager | Should -Be 'builtin'
+        @($merged | Where-Object { $_.Command -eq 'tasklist' })[0].Origin | Should -Be 'builtin'
+    }
+
+    It 'scans injected bin roots for unknown console names and skips denylisted ones' {
+        $root = Join-Path $TestDrive 'sys32'
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        New-Item -ItemType File -Force -Path (Join-Path $root 'weirdtool.exe') | Out-Null
+        New-Item -ItemType File -Force -Path (Join-Path $root 'notepad.exe') | Out-Null
+        $merged = @(Add-CmdPeekPathCommands -History @() -Catalog @{} -BinRoot @($root) -CommandTester { $false })
+        $merged.Command | Should -Contain 'weirdtool'
+        $merged.Command | Should -Not -Contain 'notepad'
+        @($merged | Where-Object { $_.Command -eq 'weirdtool' })[0].PackageManager | Should -Be 'path'
+        @($merged | Where-Object { $_.Command -eq 'weirdtool' })[0].Origin | Should -Be 'path'
+    }
 }
 
 Describe 'live apt and pacman default roots' {

@@ -232,6 +232,14 @@
     },
     "grep": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": ["linux", "macos"],
+      "shell": ["posix"],
+      "gotchas": [
+        "Not a Windows builtin. Git for Windows may ship grep.exe; prefer findstr or Select-String on Windows PowerShell."
+      ],
+      "whenToUse": "POSIX recursive text search when rg is not installed.",
+      "whenNotToUse": "On Windows PowerShell prefer findstr.exe or Select-String; rg covers both.",
       "usages": [
         "grep -R <pattern> .             # Recursive search",
         "grep -i <pattern> file          # Case-insensitive search"
@@ -260,6 +268,14 @@
     },
     "findstr": {
       "category": "system",
+      "origin": "builtin",
+      "os": ["windows"],
+      "shell": ["cmd"],
+      "gotchas": [
+        "Use findstr.exe. PowerShell find is not this command."
+      ],
+      "whenToUse": "Search file contents on Windows without installing rg.",
+      "whenNotToUse": "Use Select-String for objects in the pipeline, or rg for speed and Unicode.",
       "usages": [
         "findstr /s /i <pattern> *       # Recursive case-insensitive search",
         "findstr /n <pattern> file.txt   # Show line numbers"
@@ -277,8 +293,12 @@
       ],
       "substitutes": [
         "rg",
-        "grep"
-      ]
+        "grep",
+        "Select-String"
+      ],
+      "install": {
+        "builtin": true
+      }
     },
     "jq": {
       "category": "dev-tools",
@@ -608,6 +628,11 @@
         "wget",
         "httpie"
       ],
+      "gotchas": [
+        "In Windows PowerShell, curl is an alias for Invoke-WebRequest. Call curl.exe for the real client."
+      ],
+      "whenToUse": "HTTP from any OS, including Windows 10+ System32 curl.exe.",
+      "whenNotToUse": "Do not rely on the curl alias inside Windows PowerShell.",
       "install": {
         "scoop": "curl",
         "chocolatey": "curl",
@@ -1664,7 +1689,8 @@
       ],
       "related": [
         "gsudo",
-        "starship"
+        "starship",
+        "powershell"
       ],
       "capabilities": [
         "shell"
@@ -1845,6 +1871,14 @@
     },
     "find": {
       "category": "system",
+      "origin": "builtin",
+      "os": ["linux", "macos"],
+      "shell": ["posix"],
+      "gotchas": [
+        "Windows find.exe searches file contents (like findstr), not names. Use Get-ChildItem or fd for names on Windows."
+      ],
+      "whenToUse": "Walk a POSIX directory tree by name, type, or mtime.",
+      "whenNotToUse": "On Windows use fd, Get-ChildItem, or where.exe — not find.exe.",
       "usages": [
         "find . -name <pattern>          # Find files by name"
       ],
@@ -1857,14 +1891,26 @@
         "find files"
       ],
       "substitutes": [
-        "fd"
+        "fd",
+        "Get-ChildItem"
       ],
       "related": [
         "fd"
-      ]
+      ],
+      "install": {
+        "builtin": true
+      }
     },
     "ls": {
       "category": "system",
+      "origin": "builtin",
+      "os": ["linux", "macos"],
+      "shell": ["posix"],
+      "gotchas": [
+        "PowerShell ls is Get-ChildItem, not POSIX ls. Flags like -la do not mean the same thing."
+      ],
+      "whenToUse": "List POSIX directory entries.",
+      "whenNotToUse": "In PowerShell prefer Get-ChildItem or eza/lsd when installed.",
       "usages": [
         "ls -la                          # Long listing including hidden"
       ],
@@ -1877,8 +1923,12 @@
       ],
       "substitutes": [
         "eza",
-        "lsd"
-      ]
+        "lsd",
+        "Get-ChildItem"
+      ],
+      "install": {
+        "builtin": true
+      }
     },
     "npm": {
       "category": "dev-tools",

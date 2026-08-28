@@ -8,11 +8,13 @@ function Get-CmdPeekGap {
         [AllowEmptyCollection()]
         [object[]]$History,
         [hashtable]$Catalog,
-        [hashtable]$Kits
+        [hashtable]$Kits,
+        [string]$Os
     )
 
     if (-not $Catalog) { $Catalog = @{} }
     if (-not $Kits) { $Kits = @{} }
+    if (-not $Os) { $Os = Get-CmdPeekCurrentOs }
 
     $installed = @{}
     foreach ($row in @($History)) {
@@ -43,6 +45,8 @@ function Get-CmdPeekGap {
 
         foreach ($name in $names) {
             $key = $name.ToLowerInvariant()
+            $catEntry = Get-CmdPeekCatalogEntry -Command $name -Catalog $Catalog
+            if ($catEntry -and -not (Test-CmdPeekCatalogAppliesToOs -Entry $catEntry -Os $Os)) { continue }
             if (Test-CmdPeekNameCovered -Name $name -InstalledSet $installedSet -Catalog $Catalog) { continue }
             if (-not $relatedMap.ContainsKey($key)) {
                 $category = 'other'
@@ -178,6 +182,9 @@ function Get-CmdPeekGap {
         $members = @($Kits[$kitId])
         $anyInstalled = $false
         foreach ($member in $members) {
+            if (-not $member) { continue }
+            $memberEntry = Get-CmdPeekCatalogEntry -Command $member -Catalog $Catalog
+            if ($memberEntry -and -not (Test-CmdPeekCatalogAppliesToOs -Entry $memberEntry -Os $Os)) { continue }
             if ($member -and (Test-CmdPeekNameCovered -Name $member -InstalledSet $installedSet -Catalog $Catalog)) {
                 $anyInstalled = $true
                 break
@@ -188,6 +195,8 @@ function Get-CmdPeekGap {
         foreach ($member in $members) {
             if (-not $member) { continue }
             $lk = ([string]$member).ToLowerInvariant()
+            $entry = Get-CmdPeekCatalogEntry -Command $member -Catalog $Catalog
+            if ($entry -and -not (Test-CmdPeekCatalogAppliesToOs -Entry $entry -Os $Os)) { continue }
             if (Test-CmdPeekNameCovered -Name $member -InstalledSet $installedSet -Catalog $Catalog) { continue }
             if ($missingRelatedNames.ContainsKey($lk)) { continue }
             if ($kitSeen.ContainsKey($lk)) { continue }
@@ -266,6 +275,8 @@ function Get-CmdPeekGap {
             $lk = $name.ToLowerInvariant()
             if ($covered.ContainsKey($lk)) { continue }
             if (Test-CmdPeekNameCovered -Name $name -InstalledSet $installedSet -Catalog $Catalog) { continue }
+            $nEntry = Get-CmdPeekCatalogEntry -Command $name -Catalog $Catalog
+            if ($nEntry -and -not (Test-CmdPeekCatalogAppliesToOs -Entry $nEntry -Os $Os)) { continue }
             if ($kept -ge 3) { break }
             $neighborList.Add([pscustomobject]@{
                 kind      = 'category-neighbor'
@@ -369,9 +380,16 @@ function ConvertTo-CmdPeekSnapshot {
                 installDate    = $install
                 version        = $(if ($row.PSObject.Properties['Version']) { $row.Version } else { $null })
                 category       = $(if ($row.PSObject.Properties['Category']) { [string]$row.Category } else { 'other' })
+                origin         = $(if ($row.PSObject.Properties['Origin'] -and $row.Origin) { [string]$row.Origin } else { Get-CmdPeekCatalogOrigin -Entry $entry })
+                os             = $(if ($row.PSObject.Properties['Os'] -and $row.Os) { @($row.Os) } else { @(Get-CmdPeekCatalogOsList -Entry $entry) })
+                shell          = $(if ($row.PSObject.Properties['Shell'] -and $row.Shell) { @($row.Shell) } else { @(Get-CmdPeekCatalogShellList -Entry $entry) })
                 capabilities   = @(Get-CmdPeekCatalogCapabilityList -Entry $entry)
                 aliases        = @(Get-CmdPeekCatalogAliasList -Entry $entry)
                 substitutes    = @(Get-CmdPeekCatalogSubstituteList -Entry $entry)
+                gotchas        = $(if ($row.PSObject.Properties['Gotchas'] -and $row.Gotchas) { @($row.Gotchas) } else { @(Get-CmdPeekCatalogGotchaList -Entry $entry) })
+                whenToUse      = $(if ($row.PSObject.Properties['WhenToUse'] -and $row.WhenToUse) { [string]$row.WhenToUse } else { Get-CmdPeekCatalogWhenToUse -Entry $entry })
+                whenNotToUse   = $(if ($row.PSObject.Properties['WhenNotToUse'] -and $row.WhenNotToUse) { [string]$row.WhenNotToUse } else { Get-CmdPeekCatalogWhenNotToUse -Entry $entry })
+                collisions     = $(if ($row.PSObject.Properties['Collisions'] -and $row.Collisions) { @($row.Collisions) } else { @(Get-CmdPeekNameCollision -Command $row.Command) })
                 usages         = $usages
                 usageDetails   = @(ConvertTo-CmdPeekStructuredUsage -Usage $usages)
                 related        = $(if ($row.PSObject.Properties['Related'] -and $row.Related) { @($row.Related) } else { @() })
@@ -449,7 +467,8 @@ function Get-CmdPeekInventory {
             -CommandTester $CommandTester)
 
     $history = @(Get-CmdPeekCommandHistory -Package $packages)
-    $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath
+    $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath -DataDirectory $DataDirectory
+    $history = @(Add-CmdPeekPathCommands -History $history -Catalog $catalog -CommandTester $CommandTester -IncludeSystemDirectories)
     $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog -DataDirectory $DataDirectory)
 
     $state = Get-CmdPeekState -DataDirectory $DataDirectory
