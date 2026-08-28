@@ -28,6 +28,33 @@ function Get-CmdPeekExampleCatalogPath {
     return $null
 }
 
+function Get-CmdPeekShippedCatalogFile {
+    [CmdletBinding()]
+    param(
+        [string]$Path
+    )
+
+    $files = New-Object System.Collections.Generic.List[string]
+    $primary = Get-CmdPeekExampleCatalogPath -Path $Path
+    if ($primary) { $files.Add($primary) }
+
+    $dir = $null
+    if ($primary) {
+        $dir = Split-Path -Parent $primary
+    }
+    elseif ($PSScriptRoot) {
+        $parent = Split-Path -Parent $PSScriptRoot
+        $dir = Join-Path $parent 'examples'
+    }
+    if ($dir) {
+        $system = Join-Path $dir 'system-commands.json'
+        if ((Test-Path -LiteralPath $system) -and $files -notcontains $system) {
+            $files.Add($system)
+        }
+    }
+    return @($files)
+}
+
 function Get-CmdPeekExampleCatalog {
     [CmdletBinding()]
     param(
@@ -36,10 +63,23 @@ function Get-CmdPeekExampleCatalog {
         [string]$OverlayPath
     )
 
-    $resolved = Get-CmdPeekExampleCatalogPath -Path $Path
-    $parsed = Read-CmdPeekCatalogFile -Path $resolved
     $map = @{}
-    if ($parsed -and $parsed.Commands) { $map = $parsed.Commands }
+    foreach ($file in @(Get-CmdPeekShippedCatalogFile -Path $Path)) {
+        $parsed = Read-CmdPeekCatalogFile -Path $file
+        if ($parsed -and $parsed.Commands) {
+            $map = Merge-CmdPeekCatalogHashtable -Base $map -Overlay $parsed.Commands
+        }
+    }
+
+    if ($DataDirectory) {
+        $learned = Get-CmdPeekLearnedCatalogPath -DataDirectory $DataDirectory
+        if ($learned -and (Test-Path -LiteralPath $learned)) {
+            $learnedParsed = Read-CmdPeekCatalogFile -Path $learned
+            if ($learnedParsed -and $learnedParsed.Commands) {
+                $map = Merge-CmdPeekCatalogHashtable -Base $map -Overlay $learnedParsed.Commands
+            }
+        }
+    }
 
     $overlay = $OverlayPath
     if (-not $overlay -and $DataDirectory) {
@@ -61,10 +101,23 @@ function Get-CmdPeekCatalogKits {
         [string]$OverlayPath
     )
 
-    $resolved = Get-CmdPeekExampleCatalogPath -Path $Path
-    $parsed = Read-CmdPeekCatalogFile -Path $resolved
     $kits = @{}
-    if ($parsed -and $parsed.Kits) { $kits = $parsed.Kits }
+    foreach ($file in @(Get-CmdPeekShippedCatalogFile -Path $Path)) {
+        $parsed = Read-CmdPeekCatalogFile -Path $file
+        if ($parsed -and $parsed.Kits) {
+            $kits = Merge-CmdPeekCatalogHashtable -Base $kits -Overlay $parsed.Kits
+        }
+    }
+
+    if ($DataDirectory) {
+        $learned = Get-CmdPeekLearnedCatalogPath -DataDirectory $DataDirectory
+        if ($learned -and (Test-Path -LiteralPath $learned)) {
+            $learnedParsed = Read-CmdPeekCatalogFile -Path $learned
+            if ($learnedParsed -and $learnedParsed.Kits) {
+                $kits = Merge-CmdPeekCatalogHashtable -Base $kits -Overlay $learnedParsed.Kits
+            }
+        }
+    }
 
     $overlay = $OverlayPath
     if (-not $overlay -and $DataDirectory) {
@@ -952,9 +1005,22 @@ function Add-CmdPeekCatalogMetadata {
             $usages = @()
         }
         $related = @(Get-CmdPeekRelatedCommand -Command $row.Command -Catalog $Catalog -InstalledCommand $installed)
+        $entry = Get-CmdPeekCatalogEntry -Command $row.Command -Catalog $Catalog
+        $origin = Get-CmdPeekCatalogOrigin -Entry $entry
+        if ($row.PSObject.Properties['PackageManager'] -and $row.PackageManager) {
+            $pm = ([string]$row.PackageManager).ToLowerInvariant()
+            if ($pm -eq 'builtin') { $origin = 'builtin' }
+        }
         $row | Add-Member -NotePropertyName Category -NotePropertyValue $category -Force
         $row | Add-Member -NotePropertyName Usages -NotePropertyValue $usages -Force
         $row | Add-Member -NotePropertyName Related -NotePropertyValue $related -Force
+        $row | Add-Member -NotePropertyName Origin -NotePropertyValue $origin -Force
+        $row | Add-Member -NotePropertyName Os -NotePropertyValue @(Get-CmdPeekCatalogOsList -Entry $entry) -Force
+        $row | Add-Member -NotePropertyName Shell -NotePropertyValue @(Get-CmdPeekCatalogShellList -Entry $entry) -Force
+        $row | Add-Member -NotePropertyName Gotchas -NotePropertyValue @(Get-CmdPeekCatalogGotchaList -Entry $entry) -Force
+        $row | Add-Member -NotePropertyName WhenToUse -NotePropertyValue (Get-CmdPeekCatalogWhenToUse -Entry $entry) -Force
+        $row | Add-Member -NotePropertyName WhenNotToUse -NotePropertyValue (Get-CmdPeekCatalogWhenNotToUse -Entry $entry) -Force
+        $row | Add-Member -NotePropertyName Collisions -NotePropertyValue @(Get-CmdPeekNameCollision -Command $row.Command) -Force
         $row
     }
 }
@@ -987,6 +1053,21 @@ function Add-CmdPeekUsageProbe {
         }
         $row | Add-Member -NotePropertyName Usages -NotePropertyValue $usages -Force
         $row | Add-Member -NotePropertyName HelpProbed -NotePropertyValue $true -Force
+        if ($DataDirectory -and @($usages).Count -gt 0) {
+            $entry = Get-CmdPeekCatalogEntry -Command $row.Command -Catalog $Catalog
+            $had = @(Get-CmdPeekCatalogUsageList -Entry $entry)
+            if ($had.Count -eq 0) {
+                $origin = 'path'
+                if ($row.PSObject.Properties['Origin'] -and $row.Origin) { $origin = [string]$row.Origin }
+                elseif ($row.PSObject.Properties['PackageManager'] -and $row.PackageManager) {
+                    $pm = ([string]$row.PackageManager).ToLowerInvariant()
+                    if ($pm -eq 'builtin') { $origin = 'builtin' }
+                }
+                $cat = 'other'
+                if ($row.PSObject.Properties['Category'] -and $row.Category) { $cat = [string]$row.Category }
+                [void](Save-CmdPeekLearnedCatalogEntry -Command $row.Command -Usages @($usages) -DataDirectory $DataDirectory -Catalog $Catalog -Category $cat -Origin $origin)
+            }
+        }
         $row
     }
 }

@@ -59,6 +59,13 @@
         'Get-CmdPeekDefaultUnixRoot'
         'Format-CmdPeekGapOutput'
         'Format-CmdPeekAgentExport'
+        'Get-CmdPeekCommandCard'
+        'Compare-CmdPeekCommand'
+        'Get-CmdPeekArgvSuggestion'
+        'Get-CmdPeekSystemList'
+        'Test-CmdPeekCatalogIsBuiltin'
+        'Get-CmdPeekCurrentOs'
+        'Save-CmdPeekLearnedCatalogEntry'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

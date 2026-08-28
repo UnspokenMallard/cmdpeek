@@ -56,6 +56,39 @@ Describe 'Resolve-CmdPeekTask' {
         $jq = @($result.installed | Where-Object { $_.command -eq 'jq' })[0]
         $jq.score | Should -BeGreaterThan 50
     }
+
+    It 'maps list processes to tasklist via synonyms' {
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('windows')
+                capabilities = @('process'); tasks = @('list processes')
+                usages = @('tasklist  # List processes')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+            'jq' = [pscustomobject]@{
+                category = 'dev-tools'; capabilities = @('json'); usages = @('jq .')
+            }
+        }
+        $history = @(
+            [pscustomobject]@{ Command = 'tasklist'; PackageManager = 'builtin'; OnPath = $true }
+        )
+        $result = Resolve-CmdPeekTask -Task 'list processes' -History $history -Catalog $catalog
+        @($result.installed | ForEach-Object { $_.command }) | Should -Contain 'tasklist'
+        @($result.missing | ForEach-Object { $_.command }) | Should -Not -Contain 'tasklist'
+    }
+
+    It 'omits wrong-OS builtins from missing' {
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('windows')
+                capabilities = @('process'); tasks = @('list processes')
+                usages = @('tasklist  # List')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $result = Resolve-CmdPeekTask -Task 'list processes' -History @() -Catalog $catalog
+        @($result.missing | ForEach-Object { $_.command }) | Should -Not -Contain 'tasklist'
+    }
 }
 
 Describe 'Get-CmdPeekWhyCommand' {
@@ -127,5 +160,62 @@ Describe 'Search-CmdPeekAvailable' {
         @($result.catalogInstalled | ForEach-Object { $_.command }) | Should -Contain 'jq'
         @($result.catalogMissing | ForEach-Object { $_.command }) | Should -Contain 'fx'
         @($result.catalogMissing | ForEach-Object { $_.command }) | Should -Not -Contain 'jq'
+    }
+}
+
+Describe 'Compare-CmdPeekCommand' {
+    It 'prefers the installed side' {
+        $catalog = @{
+            'robocopy' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('windows')
+                usages = @('robocopy src dst /E  # Copy tree')
+                whenToUse = 'Windows trees'
+                gotchas = @('Exit codes 0-7 are success')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+            'Copy-Item' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'
+                usages = @('Copy-Item src dst  # Copy')
+                whenToUse = 'PowerShell copy'
+                install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $history = @([pscustomobject]@{ Command = 'robocopy'; PackageManager = 'builtin'; OnPath = $true })
+        $cmp = Compare-CmdPeekCommand -Left robocopy -Right Copy-Item -History $history -Catalog $catalog
+        $cmp.prefer | Should -Be 'robocopy'
+        $cmp.left.installed | Should -BeTrue
+        $cmp.right.installed | Should -BeFalse
+    }
+}
+
+Describe 'Get-CmdPeekArgvSuggestion' {
+    It 'maps ps aux toward an installed process tool' {
+        $catalog = @{
+            'ps' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('linux', 'macos')
+                capabilities = @('process'); tasks = @('list processes')
+                usages = @('ps aux  # All processes')
+                substitutes = @('tasklist', 'Get-Process')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('windows')
+                capabilities = @('process'); tasks = @('list processes')
+                usages = @('tasklist  # List processes')
+                substitutes = @('ps', 'Get-Process')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+            'Get-Process' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'
+                capabilities = @('process'); tasks = @('list processes')
+                usages = @('Get-Process  # Process objects')
+                substitutes = @('tasklist', 'ps')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $history = @([pscustomobject]@{ Command = 'Get-Process'; PackageManager = 'builtin'; OnPath = $true })
+        $sug = Get-CmdPeekArgvSuggestion -Argv 'ps aux' -History $history -Catalog $catalog
+        $sug.recommended.command | Should -Be 'Get-Process'
+        $sug.example | Should -Match 'Get-Process'
     }
 }

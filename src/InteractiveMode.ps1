@@ -180,27 +180,130 @@ function Format-CmdPeekWhyOutput {
 
     $lines = New-Object System.Collections.Generic.List[string]
     $title = '{0}' -f $Result.command
-    if ($Result.installed) { $title += '  installed' } else { $title += '  not installed' }
-    if ($Result.onPath) { $title += '  on PATH' }
-    if ($Result.onPathManager) { $title += (' via {0}' -f $Result.onPathManager) }
+    if ($Result.PSObject.Properties['installed'] -and $Result.installed) { $title += '  installed' } else { $title += '  not installed' }
+    if ($Result.PSObject.Properties['onPath'] -and $Result.onPath) { $title += '  on PATH' }
+    $via = $null
+    if ($Result.PSObject.Properties['onPathManager'] -and $Result.onPathManager) { $via = [string]$Result.onPathManager }
+    elseif ($Result.PSObject.Properties['packageManager'] -and $Result.packageManager) { $via = [string]$Result.packageManager }
+    if ($via) { $title += (' via {0}' -f $via) }
     $lines.Add($title)
-    if ($Result.category) { $lines.Add(('  category: {0}' -f $Result.category)) }
-    if (@($Result.capabilities).Count -gt 0) { $lines.Add(('  capabilities: {0}' -f ($Result.capabilities -join ', '))) }
-    if (@($Result.aliases).Count -gt 0) { $lines.Add(('  aliases: {0}' -f ($Result.aliases -join ', '))) }
-    if (@($Result.packageManagers).Count -gt 1) {
+    if ($Result.PSObject.Properties['origin'] -and $Result.origin) {
+        $lines.Add(('  origin: {0}' -f $Result.origin))
+    }
+    if ($Result.PSObject.Properties['whenToUse'] -and $Result.whenToUse) {
+        $lines.Add(('  when: {0}' -f $Result.whenToUse))
+    }
+    if ($Result.PSObject.Properties['whenNotToUse'] -and $Result.whenNotToUse) {
+        $lines.Add(('  avoid: {0}' -f $Result.whenNotToUse))
+    }
+    if ($Result.PSObject.Properties['category'] -and $Result.category) { $lines.Add(('  category: {0}' -f $Result.category)) }
+    if ($Result.PSObject.Properties['os'] -and @($Result.os).Count -gt 0) {
+        $lines.Add(('  os: {0}' -f (@($Result.os) -join ', ')))
+    }
+    if ($Result.PSObject.Properties['capabilities'] -and @($Result.capabilities).Count -gt 0) { $lines.Add(('  capabilities: {0}' -f ($Result.capabilities -join ', '))) }
+    if ($Result.PSObject.Properties['aliases'] -and @($Result.aliases).Count -gt 0) { $lines.Add(('  aliases: {0}' -f ($Result.aliases -join ', '))) }
+    if ($Result.PSObject.Properties['packageManagers'] -and @($Result.packageManagers).Count -gt 1) {
         $lines.Add(('  managers: {0}' -f ($Result.packageManagers -join ', ')))
     }
-    if (@($Result.substitutesInstalled).Count -gt 0) {
-        $lines.Add(('  you already have: {0}' -f ($Result.substitutesInstalled -join ', ')))
+    $gotchas = @()
+    if ($Result.PSObject.Properties['gotchas'] -and $Result.gotchas) { $gotchas = @($Result.gotchas) }
+    foreach ($g in $gotchas) {
+        $lines.Add(('  gotcha: {0}' -f $g))
     }
-    if (@($Result.substitutesMissing).Count -gt 0) {
-        $lines.Add(('  alternatives: {0}' -f ($Result.substitutesMissing -join ', ')))
+    $collisions = @()
+    if ($Result.PSObject.Properties['collisions'] -and $Result.collisions) { $collisions = @($Result.collisions) }
+    foreach ($c in $collisions) {
+        $msg = $c
+        if ($c -isnot [string] -and $c.PSObject.Properties['warning']) { $msg = [string]$c.warning }
+        $lines.Add(('  collision: {0}' -f $msg))
+    }
+    $haveSubs = @()
+    if ($Result.PSObject.Properties['substitutesInstalled'] -and $Result.substitutesInstalled) {
+        $haveSubs = @($Result.substitutesInstalled)
+    }
+    elseif ($Result.PSObject.Properties['substitutes'] -and $Result.substitutes) {
+        foreach ($s in @($Result.substitutes)) {
+            if ($s -is [string]) { continue }
+            if ($s.PSObject.Properties['installed'] -and $s.installed) { $haveSubs += [string]$s.command }
+        }
+    }
+    if ($haveSubs.Count -gt 0) {
+        $lines.Add(('  you already have: {0}' -f ($haveSubs -join ', ')))
+    }
+    $missSubs = @()
+    if ($Result.PSObject.Properties['substitutesMissing'] -and $Result.substitutesMissing) {
+        $missSubs = @($Result.substitutesMissing)
+    }
+    if ($missSubs.Count -gt 0) {
+        $lines.Add(('  alternatives: {0}' -f ($missSubs -join ', ')))
     }
     foreach ($u in @($Result.usages | Select-Object -First 5)) {
         $lines.Add(('   -  {0}' -f $u))
     }
-    if (-not $Result.installed -and @($Result.installCommands).Count -gt 0) {
-        $lines.Add(('  install: {0}' -f @($Result.installCommands)[0]))
+    $install = @()
+    if ($Result.PSObject.Properties['installCommands'] -and $Result.installCommands) {
+        $install = @($Result.installCommands)
+    }
+    $isInstalled = [bool]($Result.PSObject.Properties['installed'] -and $Result.installed)
+    if (-not $isInstalled -and $install.Count -gt 0) {
+        $lines.Add(('  install: {0}' -f $install[0]))
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Format-CmdPeekCompareOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(('Compare on {0}' -f $Result.currentOs))
+    if ($Result.prefer) {
+        $lines.Add(('  prefer: {0}' -f $Result.prefer))
+    }
+    $lines.Add('')
+    foreach ($side in @(@{ n = 'left'; c = $Result.left }, @{ n = 'right'; c = $Result.right })) {
+        $c = $side.c
+        $flag = $(if ($c.installed) { 'installed' } else { 'not installed' })
+        $lines.Add(('{0}: {1}  {2}  origin={3}' -f $side.n, $c.command, $flag, $c.origin))
+        if ($c.whenToUse) { $lines.Add(('  when: {0}' -f $c.whenToUse)) }
+        foreach ($g in @($c.gotchas | Select-Object -First 2)) {
+            $lines.Add(('  gotcha: {0}' -f $g))
+        }
+        foreach ($u in @($c.usages | Select-Object -First 1)) {
+            $lines.Add(('  -  {0}' -f $u))
+        }
+        $lines.Add('')
+    }
+    return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
+}
+
+function Format-CmdPeekSuggestOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        $Result
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add(('Suggest for: {0}' -f $Result.argv))
+    if ($Result.recommended) {
+        $r = $Result.recommended
+        $lines.Add(('  use: {0} ({1})' -f $r.command, $(if ($r.packageManager) { $r.packageManager } else { $r.origin })))
+        if ($Result.why) { $lines.Add(('  why: {0}' -f $Result.why)) }
+        if ($Result.example) { $lines.Add(('  -  {0}' -f $Result.example)) }
+        foreach ($g in @($r.gotchas | Select-Object -First 2)) {
+            $lines.Add(('  gotcha: {0}' -f $g))
+        }
+    }
+    else {
+        $lines.Add('  No catalog recommendation.')
+    }
+    $have = @($Result.installed)
+    if ($have.Count -gt 0) {
+        $lines.Add(('  installed matches: {0}' -f ((@($have | ForEach-Object { $_.command }) -join ', '))))
     }
     return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 }

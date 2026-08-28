@@ -90,3 +90,57 @@ Describe 'name coverage' {
         Test-CmdPeekNameCovered -Name 'jq' -InstalledSet $set -Catalog $catalog | Should -BeFalse
     }
 }
+
+Describe 'catalog origin and builtin install' {
+    It 'rejects builtin entries that also have package ids' {
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'
+                origin   = 'builtin'
+                usages   = @('tasklist  # list')
+                install  = [pscustomobject]@{ builtin = $true; scoop = 'tasklist' }
+            }
+        }
+        $errors = @(Test-CmdPeekCatalog -Catalog $catalog -Kits @{})
+        ($errors -join '`n') | Should -Match 'package install ids'
+    }
+
+    It 'does not emit scoop install lines for builtins' {
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'
+                origin   = 'builtin'
+                usages   = @('tasklist  # list')
+                install  = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        @(Get-CmdPeekInstallCommands -Command tasklist -Catalog $catalog) | Should -BeNullOrEmpty
+    }
+
+    It 'ships system commands in the merged catalog' {
+        $catalog = Get-CmdPeekExampleCatalog
+        $catalog.ContainsKey('tasklist') | Should -BeTrue
+        $catalog.ContainsKey('Get-Process') | Should -BeTrue
+        Test-CmdPeekCatalogIsBuiltin -Entry $catalog['tasklist'] | Should -BeTrue
+        @(Get-CmdPeekCatalogOsList -Entry $catalog['tasklist']) | Should -Contain 'windows'
+    }
+}
+
+Describe 'learned catalog' {
+    It 'writes help-probe usages for unknown commands and skips names already in the catalog' {
+        $data = Join-Path $TestDrive 'learned-data'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        $catalog = @{
+            'fd' = [pscustomobject]@{ category = 'dev-tools'; usages = @('fd x') }
+        }
+        $ok = Save-CmdPeekLearnedCatalogEntry -Command 'mysterycli' -Usages @('mysterycli status  # Show status') -DataDirectory $data -Catalog $catalog -Origin path
+        $ok | Should -BeTrue
+        $skip = Save-CmdPeekLearnedCatalogEntry -Command 'fd' -Usages @('fd extra') -DataDirectory $data -Catalog $catalog
+        $skip | Should -BeFalse
+        $base = Join-Path $TestDrive 'learned-base.json'
+        '{"commands":{"fd":{"category":"dev-tools","usages":["fd x"]}}}' | Set-Content -LiteralPath $base -Encoding UTF8
+        $merged = Get-CmdPeekExampleCatalog -Path $base -DataDirectory $data
+        $merged.ContainsKey('mysterycli') | Should -BeTrue
+        @(Get-CmdPeekCatalogUsageList -Entry $merged['mysterycli'])[0] | Should -Match 'mysterycli status'
+    }
+}

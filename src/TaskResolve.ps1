@@ -1,12 +1,65 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
+function Get-CmdPeekTaskSynonymMap {
+    [CmdletBinding()]
+    param()
+
+    return @{
+        'process'     = @('processes', 'tasklist', 'ps', 'get-process')
+        'processes'   = @('process', 'tasklist', 'ps', 'get-process')
+        'copy'        = @('robocopy', 'xcopy', 'cp', 'copy-item')
+        'files'       = @('file', 'directory', 'folder')
+        'listen'      = @('listening', 'netstat', 'ss', 'port', 'ports')
+        'listening'   = @('listen', 'netstat', 'ss', 'port')
+        'port'        = @('ports', 'listen', 'netstat', 'ss')
+        'network'     = @('ip', 'ipconfig', 'netsh', 'dns')
+        'ip'          = @('ipconfig', 'address', 'network')
+        'permission'  = @('permissions', 'acl', 'icacls', 'chmod', 'get-acl')
+        'permissions' = @('permission', 'acl', 'icacls', 'chmod')
+        'acl'         = @('icacls', 'get-acl', 'chmod')
+        'service'     = @('services', 'sc', 'get-service', 'systemctl')
+        'services'    = @('service', 'sc', 'get-service', 'systemctl')
+        'search'      = @('grep', 'findstr', 'select-string', 'rg')
+        'grep'        = @('findstr', 'select-string', 'rg')
+        'hash'        = @('checksum', 'certutil', 'sha256')
+        'clipboard'   = @('clip', 'paste')
+        'reboot'      = @('shutdown', 'restart')
+        'disk'        = @('df', 'du', 'space')
+        'owner'       = @('chown', 'icacls')
+        'path'        = @('where', 'which')
+        'hostname'    = @('computer', 'uname')
+        'log'         = @('journalctl', 'tail')
+        'dns'         = @('nslookup', 'resolve')
+        'firewall'    = @('netsh')
+        'registry'    = @('reg')
+        'scheduled'   = @('schtasks', 'cron')
+        'cron'        = @('schtasks', 'crontab')
+    }
+}
+
 function Get-CmdPeekTaskTokens {
     param([string]$Task)
     if ([string]::IsNullOrWhiteSpace($Task)) { return @() }
     $lower = $Task.ToLowerInvariant()
     $parts = @($lower -split '[^a-z0-9+.-]+' | Where-Object { $_ -and $_.Length -gt 1 })
-    return @($parts)
+    $syn = Get-CmdPeekTaskSynonymMap
+    $out = New-Object System.Collections.Generic.List[string]
+    $seen = @{}
+    foreach ($part in $parts) {
+        if ($seen.ContainsKey($part)) { continue }
+        $seen[$part] = $true
+        $out.Add($part)
+        if ($syn.ContainsKey($part)) {
+            foreach ($extra in @($syn[$part])) {
+                $el = $extra.ToLowerInvariant()
+                if ($seen.ContainsKey($el)) { continue }
+                $seen[$el] = $true
+                $out.Add($el)
+            }
+        }
+    }
+    return @($out)
 }
 
 function Get-CmdPeekTaskScore {
@@ -113,6 +166,14 @@ function Get-CmdPeekTaskScore {
         }
     }
 
+    foreach ($tok in $tokens) {
+        if ($tok.Length -gt 2 -and $cmdLower -eq $tok) {
+            $score += 40
+            $reasons.Add('synonym')
+            break
+        }
+    }
+
     $reason = ''
     if ($reasons.Count -gt 0) {
         $uniq = @($reasons | Select-Object -Unique)
@@ -136,6 +197,7 @@ function Resolve-CmdPeekTask {
     if (-not $Catalog) { $Catalog = @{} }
     if ($Limit -lt 1) { $Limit = 8 }
     $query = $Task.Trim()
+    $currentOs = Get-CmdPeekCurrentOs
     $installedSet = Get-CmdPeekInstalledNameSet -History $History -Catalog $Catalog
     $historyByName = @{}
     foreach ($row in @($History)) {
@@ -156,6 +218,15 @@ function Resolve-CmdPeekTask {
         $scored = Get-CmdPeekTaskScore -Query $query -Command $key -Entry $entry
         if ($scored.Score -le 0) { continue }
 
+        $applies = Test-CmdPeekCatalogAppliesToOs -Entry $entry -Os $currentOs
+        $isBuiltin = Test-CmdPeekCatalogIsBuiltin -Entry $entry
+        if ($applies) {
+            $scored.Score = [int]$scored.Score + 25
+        }
+        else {
+            $scored.Score = [int]$scored.Score - 40
+        }
+
         $usages = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 3)
         $row = $null
         foreach ($name in @(Get-CmdPeekCommandNamesFor -Command $key -Catalog $Catalog)) {
@@ -164,24 +235,44 @@ function Resolve-CmdPeekTask {
         }
         $covered = Test-CmdPeekNameCovered -Name $key -InstalledSet $installedSet -Catalog $Catalog
         $actuallyInstalled = $null -ne $row
+        $onPath = $false
+        if ($row -and $row.PSObject.Properties['OnPath']) { $onPath = [bool]$row.OnPath }
+        if ($actuallyInstalled) {
+            $scored.Score = [int]$scored.Score + 20
+            if ($onPath) { $scored.Score = [int]$scored.Score + 10 }
+            if ($isBuiltin -and $applies) { $scored.Score = [int]$scored.Score + 15 }
+        }
+        if ($scored.Score -le 0 -and -not $actuallyInstalled) { continue }
         $item = [pscustomobject]@{
             command          = [string]$key
             score            = [int]$scored.Score
             reason           = [string]$scored.Reason
             category         = $(if ($entry.PSObject.Properties['category'] -and $entry.category) { [string]$entry.category } else { 'other' })
+            origin           = Get-CmdPeekCatalogOrigin -Entry $entry
+            os               = @(Get-CmdPeekCatalogOsList -Entry $entry)
             capabilities     = @(Get-CmdPeekCatalogCapabilityList -Entry $entry)
             usages           = $usages
             usageDetails     = @(ConvertTo-CmdPeekStructuredUsage -Usage $usages)
             packageManager   = $(if ($row -and $row.PSObject.Properties['PackageManager']) { [string]$row.PackageManager } else { $null })
-            onPath           = $(if ($row -and $row.PSObject.Properties['OnPath']) { [bool]$row.OnPath } else { $false })
+            onPath           = $onPath
             installed        = [bool]$actuallyInstalled
+            appliesToOs      = [bool]$applies
             installCommands  = @()
         }
         if ($actuallyInstalled) {
             $installedHits.Add($item)
         }
         elseif (-not $covered) {
-            $item.installCommands = @(Get-CmdPeekInstallCommands -Command $key -Catalog $Catalog -PreferredManager $PreferredManager)
+            if ($isBuiltin -and -not $applies) { continue }
+            if ($isBuiltin) {
+                # Builtins cannot be scooped in; omit from missing unless they also have package ids.
+                $installLines = @(Get-CmdPeekInstallCommands -Command $key -Catalog $Catalog -PreferredManager $PreferredManager)
+                if ($installLines.Count -eq 0) { continue }
+                $item.installCommands = $installLines
+            }
+            else {
+                $item.installCommands = @(Get-CmdPeekInstallCommands -Command $key -Catalog $Catalog -PreferredManager $PreferredManager)
+            }
             $missingHits.Add($item)
         }
     }
@@ -271,6 +362,14 @@ function Get-CmdPeekWhyCommand {
         substitutesInstalled = @($subsInstalled)
         substitutesMissing   = @($subsMissing)
         usages          = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 5)
+        origin          = Get-CmdPeekCatalogOrigin -Entry $entry
+        os              = @(Get-CmdPeekCatalogOsList -Entry $entry)
+        shell           = @(Get-CmdPeekCatalogShellList -Entry $entry)
+        gotchas         = @(Get-CmdPeekCatalogGotchaList -Entry $entry)
+        whenToUse       = Get-CmdPeekCatalogWhenToUse -Entry $entry
+        whenNotToUse    = Get-CmdPeekCatalogWhenNotToUse -Entry $entry
+        collisions      = @(Get-CmdPeekNameCollision -Command $(if ($canonical) { $canonical } else { $Command }))
+        appliesToOs     = [bool](Test-CmdPeekCatalogAppliesToOs -Entry $entry)
         installCommands = @(Get-CmdPeekInstallCommands -Command $(if ($canonical) { $canonical } else { $Command }) -Catalog $Catalog -PreferredManager $PreferredManager)
         rows            = @($matches)
     }
@@ -371,4 +470,112 @@ function Search-CmdPeekAvailable {
     Add-Member -InputObject $out -NotePropertyName catalogInstalled -NotePropertyValue $installedArr
     Add-Member -InputObject $out -NotePropertyName packageManagers -NotePropertyValue $pmArr
     return $out
+}
+
+function Compare-CmdPeekCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Left,
+        [Parameter(Mandatory)]
+        [string]$Right,
+        [AllowEmptyCollection()]
+        [object[]]$History,
+        [hashtable]$Catalog,
+        [scriptblock]$CommandTester
+    )
+
+    if (-not $Catalog) { $Catalog = @{} }
+    $leftCard = Get-CmdPeekCommandCard -Command $Left -Catalog $Catalog -History $History -CommandTester $CommandTester
+    $rightCard = Get-CmdPeekCommandCard -Command $Right -Catalog $Catalog -History $History -CommandTester $CommandTester
+    $os = Get-CmdPeekCurrentOs
+    $prefer = $null
+    if ($leftCard.installed -and -not $rightCard.installed) { $prefer = $leftCard.command }
+    elseif ($rightCard.installed -and -not $leftCard.installed) { $prefer = $rightCard.command }
+    elseif ($leftCard.appliesToOs -and -not $rightCard.appliesToOs) { $prefer = $leftCard.command }
+    elseif ($rightCard.appliesToOs -and -not $leftCard.appliesToOs) { $prefer = $rightCard.command }
+    elseif ($leftCard.origin -eq 'builtin' -and $leftCard.appliesToOs -and $leftCard.installed) { $prefer = $leftCard.command }
+    elseif ($rightCard.origin -eq 'builtin' -and $rightCard.appliesToOs -and $rightCard.installed) { $prefer = $rightCard.command }
+
+    return [pscustomobject]@{
+        currentOs = $os
+        prefer    = $prefer
+        left      = $leftCard
+        right     = $rightCard
+    }
+}
+
+function Get-CmdPeekArgvSuggestion {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Argv,
+        [AllowEmptyCollection()]
+        [object[]]$History,
+        [hashtable]$Catalog,
+        [scriptblock]$CommandTester,
+        [string]$PreferredManager
+    )
+
+    if (-not $Catalog) { $Catalog = @{} }
+    $trim = $Argv.Trim()
+    $parts = @($trim -split '\s+', 2)
+    $name = $parts[0]
+    if ($name -match '[/\\]') {
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($name)
+    }
+    $resolvedName = Resolve-CmdPeekTask -Task $name -History $History -Catalog $Catalog -PreferredManager $PreferredManager
+    $resolvedFull = Resolve-CmdPeekTask -Task $trim -History $History -Catalog $Catalog -PreferredManager $PreferredManager
+    $card = Get-CmdPeekCommandCard -Command $name -Catalog $Catalog -History $History -CommandTester $CommandTester -PreferredManager $PreferredManager
+    $installedHits = New-Object System.Collections.Generic.List[object]
+    $seenInst = @{}
+    foreach ($hit in @($resolvedName.installed) + @($resolvedFull.installed)) {
+        if (-not $hit -or -not $hit.command) { continue }
+        $lk = $hit.command.ToLowerInvariant()
+        if ($seenInst.ContainsKey($lk)) { continue }
+        $seenInst[$lk] = $true
+        $installedHits.Add($hit)
+    }
+    $installed = @($installedHits.ToArray())
+    $recommended = $null
+    if ($card.installed -and $card.appliesToOs) {
+        $recommended = $card
+    }
+    elseif ($installed.Count -gt 0) {
+        $top = $installed[0]
+        $recommended = Get-CmdPeekCommandCard -Command $top.command -Catalog $Catalog -History $History -CommandTester $CommandTester -PreferredManager $PreferredManager
+    }
+    elseif ($card.PSObject.Properties['substitutes'] -and $card.substitutes) {
+        foreach ($sub in @($card.substitutes)) {
+            $subName = $(if ($sub -is [string]) { $sub } else { [string]$sub.command })
+            if (-not $subName) { continue }
+            $subCard = Get-CmdPeekCommandCard -Command $subName -Catalog $Catalog -History $History -CommandTester $CommandTester -PreferredManager $PreferredManager
+            if ($subCard.installed) { $recommended = $subCard; break }
+        }
+    }
+    if (-not $recommended -and $card.command) {
+        $recommended = $card
+    }
+
+    $missingHits = New-Object System.Collections.Generic.List[object]
+    $seenMiss = @{}
+    foreach ($hit in @($resolvedName.missing) + @($resolvedFull.missing)) {
+        if (-not $hit -or -not $hit.command) { continue }
+        $lk = $hit.command.ToLowerInvariant()
+        if ($seenMiss.ContainsKey($lk) -or $seenInst.ContainsKey($lk)) { continue }
+        $seenMiss[$lk] = $true
+        $missingHits.Add($hit)
+    }
+
+    return [pscustomobject]@{
+        argv         = $trim
+        queried      = $name
+        recommended  = $recommended
+        why          = $(if ($recommended) { $recommended.whenToUse } else { '' })
+        os           = Get-CmdPeekCurrentOs
+        installed    = $installed
+        substitutes  = $(if ($recommended) { @($recommended.substitutes) } else { @() })
+        example      = $(if ($recommended -and @($recommended.usages).Count -gt 0) { @($recommended.usages)[0] } else { $null })
+        missing      = @($missingHits.ToArray())
+    }
 }

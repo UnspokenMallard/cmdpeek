@@ -278,6 +278,29 @@ Describe 'Get-CmdPeekGap' {
         $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog)
         @($gaps | Where-Object { $_.kind -eq 'missing-related' -and $_.command -eq 'grep' }).Count | Should -Be 0
     }
+
+    It 'does not suggest a related builtin that does not apply to this OS' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'tasklist'; PackageName = 'tasklist'; PackageManager = 'builtin'
+                Category = 'system'; Usages = @('tasklist'); Related = @('ps')
+            }
+        )
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('windows')
+                related = @('ps'); usages = @('tasklist')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+            'ps' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('linux', 'macos')
+                related = @('tasklist'); usages = @('ps aux')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Os windows)
+        @($gaps | Where-Object { $_.kind -eq 'missing-related' -and $_.command -eq 'ps' }).Count | Should -Be 0
+    }
 }
 
 Describe 'ConvertTo-CmdPeekSnapshot' {

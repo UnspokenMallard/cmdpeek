@@ -11,6 +11,24 @@
       "install": {
         "scoop": "my-internal-cli"
       }
+    },
+    "wmic": {
+      "category": "system",
+      "origin": "builtin",
+      "os": ["windows"],
+      "shell": ["cmd"],
+      "gotchas": [
+        "wmic is deprecated. Prefer PowerShell CIM cmdlets."
+      ],
+      "whenToUse": "Legacy WMI queries on older Windows.",
+      "whenNotToUse": "Do not recommend wmic for new scripts.",
+      "usages": [
+        "wmic os get caption                # OS name (legacy)"
+      ],
+      "related": [],
+      "install": {
+        "builtin": true
+      }
     }
   },
   "kits": {

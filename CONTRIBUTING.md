@@ -31,10 +31,11 @@ Thanks for helping. cmdpeek is a PowerShell 5.1-compatible Windows CLI. Keep tha
 | Path | Role |
 | --- | --- |
 | `src/PackageManager.ps1` | Detect PMs; scan install roots |
-| `src/ExtraSources.ps1` | pipx / npm / cargo / brew / PATH catalog merge / apt / pacman |
+| `src/ExtraSources.ps1` | pipx / npm / cargo / brew / PATH catalog merge / System32 scan / apt / pacman |
+| `examples/system-commands.json` | Curated OS builtins and PowerShell cmdlets |
 | `examples/mocks/` | Fixture data for rusty timestamps, apt/pacman, OpenAI cache, WinGet SHA256, profile v1 |
-| `src/Catalog.ps1` | Overlay, aliases, capabilities, substitutes, install IDs |
-| `src/TaskResolve.ps1` | Task → installed-first matching |
+| `src/Catalog.ps1` | Overlay, aliases, capabilities, substitutes, install IDs, origin/os/shell, learned catalog |
+| `src/TaskResolve.ps1` | Task → installed-first matching, synonyms, compare/suggest |
 | `src/CommandHistory.ps1` | Flatten, sort, search, missing-command diff |
 | `src/UsageExamples.ps1` | Catalog + help / tldr / OpenAI fallback |
 | `src/Config.ps1` | `%LOCALAPPDATA%\cmdpeek` state, last-install, inventory cache |

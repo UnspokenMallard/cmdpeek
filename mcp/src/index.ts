@@ -11,6 +11,8 @@ import {
   filterGaps,
   filterRusty,
   searchSnapshotCommands,
+  filterSystemCommands,
+  isBuiltinCatalog,
   AGENT_PLAYBOOK,
 } from "./helpers.js";
 
@@ -24,9 +26,16 @@ type Snapshot = {
     installDate?: string;
     version?: string;
     category?: string;
+    origin?: string;
+    os?: string[];
+    shell?: string[];
     capabilities?: string[];
     aliases?: string[];
     substitutes?: string[];
+    gotchas?: string[];
+    whenToUse?: string;
+    whenNotToUse?: string;
+    collisions?: Array<{ command?: string; shell?: string; warning?: string } | string>;
     usages?: string[];
     usageDetails?: Array<{ argv: string; comment?: string; unsafe?: boolean }>;
     related?: string[];
@@ -37,12 +46,19 @@ type Snapshot = {
   catalog?: Array<{
     command: string;
     category?: string;
+    origin?: string;
+    os?: string[];
+    shell?: string[];
     capabilities?: string[];
     aliases?: string[];
     related?: string[];
     substitutes?: string[];
+    gotchas?: string[];
+    whenToUse?: string;
+    whenNotToUse?: string;
+    collisions?: Array<{ command?: string; shell?: string; warning?: string } | string>;
     usages?: string[];
-    install?: Record<string, string>;
+    install?: Record<string, unknown>;
   }>;
   favorites?: string[];
   hidden?: string[];
@@ -218,6 +234,11 @@ server.tool(
       installed: installed[0] ?? null,
       catalog: catalog ?? null,
       relatedGaps,
+      collisions: catalog?.collisions ?? installed[0]?.collisions ?? [],
+      gotchas: catalog?.gotchas ?? installed[0]?.gotchas ?? [],
+      whenToUse: catalog?.whenToUse ?? installed[0]?.whenToUse ?? null,
+      whenNotToUse: catalog?.whenNotToUse ?? installed[0]?.whenNotToUse ?? null,
+      origin: catalog?.origin ?? installed[0]?.origin ?? null,
       note: unsafeNote,
     });
   },
@@ -225,7 +246,7 @@ server.tool(
 
 server.tool(
   "resolve_task",
-  "Map a task or capability to tools. Always prefer installed matches before suggesting a new package.",
+  "Map a task or capability to tools. Always prefer installed matches, then OS builtins on this machine, before suggesting a new package.",
   {
     task: z.string().describe('Task, capability, or tool name, e.g. "pretty-print json" or "search"'),
     limit: z.number().int().min(1).max(50).optional(),
@@ -407,7 +428,13 @@ server.tool(
   async ({ name, manager, execute }) => {
     const snap = await loadSnapshot();
     const catalog = filterCatalogCommand(snap.catalog ?? [], name);
-    const install = catalog?.install ?? {};
+    if (isBuiltinCatalog(catalog)) {
+      return asText({
+        error: `Command '${name}' is an OS builtin (origin=builtin) and cannot be installed via scoop/choco/winget.`,
+        origin: catalog?.origin ?? "builtin",
+      });
+    }
+    const install = (catalog?.install ?? {}) as Record<string, string>;
     const pref = manager ?? "scoop";
     const id = install[pref] ?? install.scoop ?? install.winget ?? install.chocolatey ?? name;
     const command =
@@ -434,6 +461,41 @@ server.tool(
     try {
       const raw = await runCmdPeek(["agent-export"]);
       return { content: [{ type: "text", text: raw }] };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "compare_commands",
+  "Compare two commands (origin, OS, gotchas, usages) and say which to prefer on this machine.",
+  {
+    left: z.string().describe("First command, e.g. robocopy"),
+    right: z.string().describe("Second command, e.g. Copy-Item"),
+  },
+  async ({ left, right }) => {
+    try {
+      const raw = await runCmdPeek(["-Compare", `${left} ${right}`, "-Json"]);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "suggest_for_argv",
+  "Map a hallucinated or off-OS command line to an installed equivalent on this machine.",
+  {
+    argv: z.string().describe('Command line, e.g. "ps aux" or "grep -R foo ."'),
+  },
+  async ({ argv }) => {
+    try {
+      const raw = await runCmdPeek(["-Suggest", argv, "-Json"]);
+      return asText(JSON.parse(raw));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return asText({ error: message });
@@ -516,6 +578,23 @@ server.resource("agent-export", "cmdpeek://agent-export", async () => {
   };
 });
 
+server.resource("system", "cmdpeek://system", async () => {
+  const snap = await loadSnapshot();
+  const commands = filterSystemCommands(snap.commands ?? []);
+  const catalog = (snap.catalog ?? []).filter(
+    (c) => (c.origin ?? "").toLowerCase() === "builtin" || (c.category ?? "").toLowerCase() === "system",
+  );
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://system",
+        mimeType: "application/json",
+        text: JSON.stringify({ commands, catalog }, null, 2),
+      },
+    ],
+  };
+});
+
 server.registerPrompt(
   "after_install",
   {
@@ -529,6 +608,28 @@ server.registerPrompt(
         content: {
           type: "text",
           text: AGENT_PLAYBOOK,
+        },
+      },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "prefer_system_then_installed",
+  {
+    title: "Prefer system then installed tools",
+    description: "Try OS builtins, then inventoried CLIs, and only then suggest an install",
+    argsSchema: {
+      task: z.string().describe("What the user wants to do"),
+    },
+  },
+  async ({ task }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: `The user wants to: ${task}\n\n1. Call resolve_task.\n2. Prefer OS builtins on this machine (cmdpeek://system) when they apply.\n3. Then prefer other installed inventory matches.\n4. Honor collisions/gotchas (PowerShell curl/sc/find/where).\n5. Only suggest a missing catalog package if nothing installed or builtin covers the task.\n${unsafeNote}`,
         },
       },
     ],
@@ -550,7 +651,7 @@ server.registerPrompt(
         role: "user",
         content: {
           type: "text",
-          text: `The user wants to: ${task}\n\nCall cmdpeek resolve_task with that text. If installed matches exist, use those and show usages. Only suggest a missing catalog tool if nothing installed covers the task. ${unsafeNote}`,
+          text: `The user wants to: ${task}\n\nCall cmdpeek resolve_task with that text. Prefer OS builtins and installed matches. Only suggest a missing catalog tool if nothing installed covers the task. ${unsafeNote}`,
         },
       },
     ],
