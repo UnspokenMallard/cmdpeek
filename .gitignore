@@ -21,6 +21,10 @@ Desktop.ini
 .idea/
 *.swp
 
+# Agent tooling
+.serena/
+.superpowers/
+
 # Secrets
 .env
 .env.*
