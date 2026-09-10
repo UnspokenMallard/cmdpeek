@@ -1,6 +1,12 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
+function Get-CmdPeekUnknownInstallDate {
+    [CmdletBinding()]
+    param()
+    return [datetime]'2000-01-01'
+}
+
 function Get-CmdPeekCommandHistory {
     [CmdletBinding()]
     param(
@@ -15,13 +21,19 @@ function Get-CmdPeekCommandHistory {
     }
 
     $rows = foreach ($pkg in @($Package)) {
+        # Managers such as apt do not record an install date; sort those to the bottom
+        # instead of failing the whole scan.
+        $installed = Get-CmdPeekUnknownInstallDate
+        if ($pkg -and $pkg.PSObject.Properties['InstallDate'] -and $null -ne $pkg.InstallDate) {
+            try { $installed = [datetime]$pkg.InstallDate } catch { $installed = Get-CmdPeekUnknownInstallDate }
+        }
         foreach ($cmd in @($pkg.Commands)) {
             if ([string]::IsNullOrWhiteSpace($cmd)) { continue }
             [pscustomobject]@{
                 Command        = [string]$cmd
                 PackageName    = [string]$pkg.Name
                 PackageManager = [string]$pkg.PackageManager
-                InstallDate    = [datetime]$pkg.InstallDate
+                InstallDate    = $installed
                 Version        = $(if ($pkg.PSObject.Properties['Version']) { $pkg.Version } else { $null })
                 Favorite       = $false
                 Hidden         = $false
