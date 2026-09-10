@@ -99,6 +99,47 @@ Describe 'Get-CmdPeekCommandHistory' {
         $history = @(Get-CmdPeekCommandHistory -Package $packages)
         $history.Count | Should -Be 0
     }
+
+    It 'keeps packages whose manager reports no install date, sorted last' {
+        $packages = @(
+            [pscustomobject]@{
+                Name           = 'ripgrep'
+                Version        = '14.1.0'
+                PackageManager = 'apt'
+                InstallDate    = $null
+                Commands       = @('rg')
+            }
+            [pscustomobject]@{
+                Name           = 'jq'
+                Version        = '1.7.1'
+                PackageManager = 'scoop'
+                InstallDate    = [datetime]'2025-08-18T09:00:00Z'
+                Commands       = @('jq')
+            }
+        )
+
+        $history = @(Get-CmdPeekCommandHistory -Package $packages)
+        $history.Count | Should -Be 2
+        $history[0].Command | Should -Be 'jq'
+        $history[1].Command | Should -Be 'rg'
+        $history[1].InstallDate | Should -Be (Get-CmdPeekUnknownInstallDate)
+    }
+
+    It 'does not throw when a package install date is unparseable' {
+        $packages = @(
+            [pscustomobject]@{
+                Name           = 'weird'
+                Version        = '1.0'
+                PackageManager = 'apt'
+                InstallDate    = 'not-a-date'
+                Commands       = @('weird')
+            }
+        )
+
+        $history = @(Get-CmdPeekCommandHistory -Package $packages)
+        $history.Count | Should -Be 1
+        $history[0].InstallDate | Should -Be (Get-CmdPeekUnknownInstallDate)
+    }
 }
 
 Describe 'Find-CmdPeekMissingCommand' {

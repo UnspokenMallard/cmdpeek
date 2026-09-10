@@ -647,6 +647,7 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekPackageManagerInstallHint'
     'Get-CmdPeekInstalledPackage'
     'Get-CmdPeekCommandHistory'
+    'Get-CmdPeekUnknownInstallDate'
     'Find-CmdPeekMissingCommand'
     'Search-CmdPeekCommand'
     'Select-CmdPeekExactCommand'
