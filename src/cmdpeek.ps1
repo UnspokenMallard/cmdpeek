@@ -44,6 +44,11 @@ param(
 
     [switch]$Gaps,
 
+    [ValidateSet('kit', 'missing-related', 'shadowing', 'not-on-path', 'category-neighbor', 'thin-docs', 'all')]
+    [string[]]$GapKind,
+
+    [int]$GapLimit = -1,
+
     [string]$Since,
 
     [switch]$Recent,
@@ -60,6 +65,8 @@ param(
 
     [Alias('For')]
     [string]$Task,
+
+    [int]$TaskLimit = 0,
 
     [string]$Why,
 
@@ -106,7 +113,8 @@ Usage:
   cmdpeek have [cap]      Installed catalog tools you can use
   cmdpeek agent-export    Markdown playbook of installed tools for agents
   cmdpeek agent-export FILE   Write that playbook to FILE
-  cmdpeek gaps            Human-readable inventory gaps
+  cmdpeek gaps            Human-readable inventory gaps (ranked, capped, no thin-docs)
+  cmdpeek gaps -GapKind thin-docs -GapLimit 0    One gap kind, uncapped
   cmdpeek rusty           Installed tools missing from recent history
   cmdpeek search-available fzf   Catalog + optional package-manager search
   cmdpeek -Since 7d       Window: last|all|ISO|24h|7d (not minutes)
@@ -206,6 +214,8 @@ if ($Export) { $invoke.Export = $Export }
 if ($Import) { $invoke.Import = $Import }
 if ($Json) { $invoke.Json = $true }
 if ($Gaps) { $invoke.Gaps = $true }
+if ($GapKind) { $invoke.GapKind = $GapKind }
+if ($PSBoundParameters.ContainsKey('GapLimit')) { $invoke.GapLimit = $GapLimit }
 if ($Since) { $invoke.Since = $Since }
 if ($Recent) { $invoke.Recent = $true }
 if ($Rusty) { $invoke.Rusty = $true }
@@ -214,6 +224,7 @@ if ($Unhide) { $invoke.Unhide = $Unhide }
 if ($Star) { $invoke.Star = $Star }
 if ($Unstar) { $invoke.Unstar = $Unstar }
 if ($Task) { $invoke.Task = $Task }
+if ($TaskLimit -gt 0) { $invoke.TaskLimit = $TaskLimit }
 if ($Why) { $invoke.Why = $Why }
 if ($Explain) { $invoke.Explain = $Explain }
 if ($SearchAvailable) { $invoke.SearchAvailable = $SearchAvailable }

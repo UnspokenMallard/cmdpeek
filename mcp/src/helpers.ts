@@ -31,6 +31,46 @@ export function filterGaps<T extends { kind?: string }>(gaps: T[], kind?: string
   return gaps.filter((g) => normalize(g.kind) === want);
 }
 
+// Mirrors $script:CmdPeekGapKindRank in src/Inventory.ps1.
+export const GAP_KIND_RANK: Record<string, number> = {
+  kit: 0,
+  "missing-related": 1,
+  shadowing: 2,
+  "not-on-path": 3,
+  "category-neighbor": 4,
+  "thin-docs": 5,
+};
+
+export function rankGap(kind: string | undefined): number {
+  return GAP_KIND_RANK[normalize(kind)] ?? 99;
+}
+
+export function sortGaps<T extends { kind?: string; command?: string }>(gaps: T[]): T[] {
+  return [...gaps].sort((a, b) => {
+    const byKind = rankGap(a.kind) - rankGap(b.kind);
+    if (byKind !== 0) return byKind;
+    return normalize(a.command).localeCompare(normalize(b.command));
+  });
+}
+
+export type Capped<T> = {
+  items: T[];
+  total: number;
+  returned: number;
+  truncated: boolean;
+};
+
+export function cap<T>(items: T[], limit: number): Capped<T> {
+  const all = items ?? [];
+  const kept = limit > 0 ? all.slice(0, limit) : all;
+  return {
+    items: kept,
+    total: all.length,
+    returned: kept.length,
+    truncated: kept.length < all.length,
+  };
+}
+
 export function filterRusty<T extends { kind?: string }>(rows: T[], kind?: string): T[] {
   if (!kind || kind === "all") return rows;
   const want = kind.toLowerCase();
@@ -87,6 +127,56 @@ export function filterSystemCommands<
     const cat = normalize(c.category);
     return origin === "builtin" || pm === "builtin" || pm === "windows" || cat === "system";
   });
+}
+
+type SnapshotShape = {
+  generatedAt?: string;
+  managers?: Array<{ name: string; present: boolean }>;
+  commands?: unknown[];
+  catalog?: unknown[];
+  gaps?: unknown[];
+  rusty?: unknown[];
+  favorites?: string[];
+  hidden?: string[];
+  gapSummary?: unknown;
+};
+
+export type SnapshotSummary = {
+  generatedAt: string | null;
+  counts: {
+    commands: number;
+    catalog: number;
+    rusty: number;
+    favorites: number;
+    hidden: number;
+  };
+  managersPresent: string[];
+  managersMissing: string[];
+  gapSummary: unknown;
+  note: string;
+};
+
+// cmdpeek://inventory used to serialize the whole scan. On a machine with a
+// populated package database that is hundreds of kilobytes of context, so the
+// resource now describes the inventory and points at the tools that slice it.
+export function summarizeSnapshot(snap: SnapshotShape): SnapshotSummary {
+  const managers = snap.managers ?? [];
+  return {
+    generatedAt: snap.generatedAt ?? null,
+    counts: {
+      commands: (snap.commands ?? []).length,
+      catalog: (snap.catalog ?? []).length,
+      rusty: (snap.rusty ?? []).length,
+      favorites: (snap.favorites ?? []).length,
+      hidden: (snap.hidden ?? []).length,
+    },
+    managersPresent: managers.filter((m) => m?.present).map((m) => m.name),
+    managersMissing: managers.filter((m) => !m?.present).map((m) => m.name),
+    gapSummary: snap.gapSummary ?? null,
+    note:
+      "This resource is a summary. Use search_commands, get_command, list_recent_commands, " +
+      "list_installed_for, or list_gaps to read the parts you need.",
+  };
 }
 
 export function isBuiltinCatalog<

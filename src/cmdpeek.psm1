@@ -69,7 +69,10 @@ function Invoke-CmdPeek {
         [string]$AgentExportPath,
         [string]$Compare,
         [string]$Suggest,
-        [string[]]$BinRoot
+        [string[]]$BinRoot,
+        [string[]]$GapKind,
+        [int]$GapLimit = -1,
+        [int]$TaskLimit = 0
     )
 
     if ($Recent) {
@@ -252,7 +255,14 @@ function Invoke-CmdPeek {
     $preferred = $state.PreferredPackageManager
 
     if ($Task) {
-        $resolved = Resolve-CmdPeekTask -Task $Task -History $history -Catalog $catalog -PreferredManager $preferred
+        $taskArgs = @{
+            Task             = $Task
+            History          = $history
+            Catalog          = $catalog
+            PreferredManager = $preferred
+        }
+        if ($TaskLimit -gt 0) { $taskArgs.Limit = $TaskLimit }
+        $resolved = Resolve-CmdPeekTask @taskArgs
         if ($Json) {
             Write-Output ($resolved | ConvertTo-Json -Depth 8)
         }
@@ -446,6 +456,10 @@ function Invoke-CmdPeek {
             CommandTester  = $CommandTester
             RecentLines    = $RecentLines
             DataDirectory  = $DataDirectory
+            GapLimit       = $GapLimit
+        }
+        if ($PSBoundParameters.ContainsKey('GapKind') -and $GapKind) {
+            $snapArgs.GapKind = $GapKind
         }
         if ($PSBoundParameters.ContainsKey('HistoryPath')) {
             $snapArgs.HistoryPath = $HistoryPath
@@ -455,14 +469,20 @@ function Invoke-CmdPeek {
         }
         $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
         if ($Gaps -and -not $HumanGaps) {
-            Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+            Write-Output ([pscustomobject]@{
+                gaps    = @($snapshot.gaps)
+                summary = $snapshot.gapSummary
+            } | ConvertTo-Json -Depth 8)
         }
         elseif ($HumanGaps) {
             if ($Json) {
-                Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+                Write-Output ([pscustomobject]@{
+                    gaps    = @($snapshot.gaps)
+                    summary = $snapshot.gapSummary
+                } | ConvertTo-Json -Depth 8)
             }
             else {
-                Write-Output (Format-CmdPeekGapOutput -Gap @($snapshot.gaps))
+                Write-Output (Format-CmdPeekGapOutput -Gap @($snapshot.gaps) -Summary $snapshot.gapSummary)
             }
         }
         else {
@@ -511,7 +531,9 @@ function Invoke-CmdPeek {
 
     if ($useInteractive) {
         $kits = Get-CmdPeekCatalogKits -Path $ExamplesPath -DataDirectory $DataDirectory
-        $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
+        $selectArgs = @{ Gap = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits); Limit = $GapLimit }
+        if ($PSBoundParameters.ContainsKey('GapKind') -and $GapKind) { $selectArgs.Kind = $GapKind }
+        $gapList = @(Select-CmdPeekGap @selectArgs)
         Invoke-CmdPeekInteractive -History $history -State $state -DataDirectory $DataDirectory -Gap $gapList -Catalog $catalog -HelpRunner $HelpRunner
         return
     }
@@ -666,6 +688,10 @@ Export-ModuleMember -Function @(
     'Format-CmdPeekQuickOutput'
     'Install-CmdPeekTrackedPackage'
     'Get-CmdPeekGap'
+    'Get-CmdPeekGapKind'
+    'Get-CmdPeekGapKindRank'
+    'Get-CmdPeekGapSummary'
+    'Select-CmdPeekGap'
     'Get-CmdPeekInventory'
     'ConvertTo-CmdPeekSnapshot'
     'Add-CmdPeekProfileHint'
@@ -684,6 +710,8 @@ Export-ModuleMember -Function @(
     'Format-CmdPeekWhyOutput'
     'Format-CmdPeekHaveOutput'
     'Get-CmdPeekAptPackage'
+    'Get-CmdPeekAptPackageCommand'
+    'Get-CmdPeekAptFileListMap'
     'Get-CmdPeekPacmanPackage'
     'Get-CmdPeekWinGetReleaseInfo'
     'Get-CmdPeekMockAiExample'

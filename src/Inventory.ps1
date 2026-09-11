@@ -1,6 +1,107 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 
+$script:CmdPeekGapKindRank = [ordered]@{
+    'kit'               = 0
+    'missing-related'   = 1
+    'shadowing'         = 2
+    'not-on-path'       = 3
+    'category-neighbor' = 4
+    'thin-docs'         = 5
+}
+
+# thin-docs fires once per command with no curated usage line, so on a machine with
+# a populated package database it drowns out every actionable gap. It stays
+# reachable by asking for it, but it is never part of the default answer.
+$script:CmdPeekGapKindNoisy = @('thin-docs')
+
+$script:CmdPeekGapDefaultLimit = 50
+
+function Get-CmdPeekGapKind {
+    [CmdletBinding()]
+    param()
+    return @($script:CmdPeekGapKindRank.Keys)
+}
+
+function Get-CmdPeekGapKindRank {
+    [CmdletBinding()]
+    param([string]$Kind)
+
+    if ($Kind -and $script:CmdPeekGapKindRank.Contains($Kind)) {
+        return [int]$script:CmdPeekGapKindRank[$Kind]
+    }
+    return 99
+}
+
+function Get-CmdPeekGapSummary {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$Gap
+    )
+
+    $counts = [ordered]@{}
+    foreach ($kind in @(Get-CmdPeekGapKind)) { $counts[$kind] = 0 }
+    $total = 0
+    foreach ($g in @($Gap)) {
+        if (-not $g) { continue }
+        $total++
+        $kind = ''
+        if ($g.PSObject.Properties['kind'] -and $g.kind) { $kind = [string]$g.kind }
+        if (-not $counts.Contains($kind)) { $counts[$kind] = 0 }
+        $counts[$kind] = [int]$counts[$kind] + 1
+    }
+    $obj = New-Object PSObject
+    foreach ($kind in @($counts.Keys)) {
+        $obj | Add-Member -NotePropertyName ([string]$kind) -NotePropertyValue ([int]$counts[$kind])
+    }
+    return [pscustomobject]@{
+        total  = $total
+        counts = $obj
+    }
+}
+
+function Select-CmdPeekGap {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$Gap,
+        [string[]]$Kind,
+        [int]$Limit = -1
+    )
+
+    $wanted = @()
+    if ($PSBoundParameters.ContainsKey('Kind') -and $Kind) {
+        $wanted = @($Kind | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+    }
+    $includeAll = $wanted -contains 'all'
+    $explicit = $wanted.Count -gt 0 -and -not $includeAll
+    if ($Limit -lt 0) { $Limit = $script:CmdPeekGapDefaultLimit }
+
+    $kept = New-Object System.Collections.Generic.List[object]
+    foreach ($g in @($Gap)) {
+        if (-not $g) { continue }
+        $kind = ''
+        if ($g.PSObject.Properties['kind'] -and $g.kind) { $kind = ([string]$g.kind).ToLowerInvariant() }
+        if ($explicit) {
+            if ($wanted -notcontains $kind) { continue }
+        }
+        elseif (-not $includeAll -and $script:CmdPeekGapKindNoisy -contains $kind) { continue }
+        $kept.Add($g)
+    }
+
+    $arr = @($kept.ToArray())
+    if ($arr.Count -gt 1) {
+        $arr = @($arr | Sort-Object `
+            @{ Expression = { Get-CmdPeekGapKindRank -Kind ([string]$_.kind) } }, `
+            @{ Expression = { ([string]$_.command).ToLowerInvariant() } })
+    }
+    if ($Limit -gt 0 -and $arr.Count -gt $Limit) {
+        $arr = @($arr | Select-Object -First $Limit)
+    }
+    return $arr
+}
+
 function Get-CmdPeekGap {
     [CmdletBinding()]
     param(
@@ -315,6 +416,8 @@ function ConvertTo-CmdPeekSnapshot {
         [int]$RecentLines = 0,
         [string]$LastUsedPath,
         [string]$DataDirectory,
+        [string[]]$GapKind,
+        [int]$GapLimit = -1,
         [switch]$PersistLastUsed
     )
 
@@ -333,7 +436,11 @@ function ConvertTo-CmdPeekSnapshot {
         $kitMap = Get-CmdPeekCatalogKits
     }
     if (-not $kitMap) { $kitMap = @{} }
-    $gaps = @(Get-CmdPeekGap -History $history -Catalog $Catalog -Kits $kitMap)
+    $allGaps = @(Get-CmdPeekGap -History $history -Catalog $Catalog -Kits $kitMap)
+    $gapSummary = Get-CmdPeekGapSummary -Gap $allGaps
+    $selectArgs = @{ Gap = $allGaps; Limit = $GapLimit }
+    if ($PSBoundParameters.ContainsKey('GapKind') -and $GapKind) { $selectArgs.Kind = $GapKind }
+    $gaps = @(Select-CmdPeekGap @selectArgs)
 
     $usedPath = $LastUsedPath
     if (-not $usedPath -and $DataDirectory) {
@@ -420,6 +527,13 @@ function ConvertTo-CmdPeekSnapshot {
         favorites   = @($Favorite | Where-Object { $_ })
         hidden      = @($Hidden | Where-Object { $_ })
         gaps        = $gaps
+        gapSummary  = [pscustomobject]@{
+            total     = [int]$gapSummary.total
+            returned  = [int]@($gaps).Count
+            truncated = [bool](@($gaps).Count -lt [int]$gapSummary.total)
+            counts    = $gapSummary.counts
+            note      = 'gaps is ranked and capped, and omits thin-docs. Ask for a kind explicitly to see the rest.'
+        }
         rusty       = $rusty
     }
 }
@@ -440,21 +554,19 @@ function Get-CmdPeekInventory {
         [int]$RecentLines = 0,
         [string]$AptStatusPath,
         [string]$PacmanRoot,
-        [string]$LastUsedPath
+        [string]$LastUsedPath,
+        [string[]]$GapKind,
+        [int]$GapLimit = -1
     )
+
+    $allManagers = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
 
     $managerNames = @()
     if ($PSBoundParameters.ContainsKey('EnabledManagers')) {
         $managerNames = @($EnabledManagers)
     }
     else {
-        $detected = @(Get-CmdPeekPackageManager -CommandTester $CommandTester)
-        $managerNames = @($detected | Select-Object -ExpandProperty Name)
-    }
-
-    $managers = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
-    if ($managerNames.Count -gt 0) {
-        $managers = @($managers | Where-Object { $managerNames -contains $_.Name })
+        $managerNames = @($allManagers | Where-Object { $_.Present } | Select-Object -ExpandProperty Name)
     }
 
     $packages = @(Get-CmdPeekInstalledPackage `
@@ -481,13 +593,17 @@ function Get-CmdPeekInventory {
 
     $snapArgs = @{
         History       = $history
-        Manager       = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
+        Manager       = $allManagers
         Catalog       = $catalog
         Favorite      = @($state.Favorites)
         Hidden        = @($state.Hidden)
         CommandTester = $CommandTester
         RecentLines   = $RecentLines
         DataDirectory = $DataDirectory
+        GapLimit      = $GapLimit
+    }
+    if ($PSBoundParameters.ContainsKey('GapKind') -and $GapKind) {
+        $snapArgs.GapKind = $GapKind
     }
     if ($PSBoundParameters.ContainsKey('HistoryPath')) {
         $snapArgs.HistoryPath = $HistoryPath
@@ -499,7 +615,7 @@ function Get-CmdPeekInventory {
 
     return [pscustomobject]@{
         History  = $history
-        Managers = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
+        Managers = $allManagers
         State    = $state
         Catalog  = $catalog
         Snapshot = $snapshot
