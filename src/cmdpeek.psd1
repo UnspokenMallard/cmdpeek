@@ -49,6 +49,7 @@
         'Test-CmdPeekCatalog'
         'Get-CmdPeekLastInstall'
         'Get-CmdPeekInstallCommands'
+        'Test-CmdPeekShellBuiltinName'
         'Add-CmdPeekPathCommands'
         'Format-CmdPeekTaskOutput'
         'Format-CmdPeekWhyOutput'

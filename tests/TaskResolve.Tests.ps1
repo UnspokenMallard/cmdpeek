@@ -219,3 +219,24 @@ Describe 'Get-CmdPeekArgvSuggestion' {
         $sug.example | Should -Match 'Get-Process'
     }
 }
+
+Describe 'shell builtins in a command card' {
+    It 'labels a shell builtin as builtin and offers no install line' {
+        $card = Get-CmdPeekCommandCard -Command 'cd' -Catalog @{} -History @()
+        $text = Format-CmdPeekWhyOutput -Result $card
+
+        $card.origin | Should -Be 'builtin'
+        @($card.installCommands) | Should -BeNullOrEmpty
+        $text | Should -Match 'cd\s+builtin'
+        $text | Should -Not -Match 'install:'
+    }
+
+    It 'still says not installed and offers a guess for an unknown name' {
+        $card = Get-CmdPeekCommandCard -Command 'cmdpeek-no-such-binary' -Catalog @{} -History @()
+        $text = Format-CmdPeekWhyOutput -Result $card
+
+        $card.origin | Should -Be 'package'
+        $text | Should -Match 'not installed'
+        $text | Should -Match 'install:'
+    }
+}

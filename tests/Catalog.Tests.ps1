@@ -126,6 +126,44 @@ Describe 'catalog origin and builtin install' {
     }
 }
 
+Describe 'shell builtins are not installable' {
+    It 'recognises an alias and a cmdlet as shell builtins' {
+        Test-CmdPeekShellBuiltinName -Command 'cd' | Should -BeTrue
+        Test-CmdPeekShellBuiltinName -Command 'Set-Location' | Should -BeTrue
+    }
+
+    It 'does not call a real executable or an unknown name a shell builtin' {
+        Test-CmdPeekShellBuiltinName -Command 'pwsh' | Should -BeFalse
+        Test-CmdPeekShellBuiltinName -Command 'cmdpeek-no-such-binary' | Should -BeFalse
+        Test-CmdPeekShellBuiltinName -Command '' | Should -BeFalse
+    }
+
+    It 'emits no install guess for a name the shell owns' {
+        @(Get-CmdPeekInstallCommands -Command 'cd' -Catalog @{}) | Should -BeNullOrEmpty
+    }
+
+    It 'still guesses an install line for a name that could be a package' {
+        $lines = @(Get-CmdPeekInstallCommands -Command 'cmdpeek-no-such-binary' -Catalog @{} -PreferredManager 'scoop')
+        $lines[0] | Should -Match 'scoop install cmdpeek-no-such-binary'
+    }
+
+    It 'reports origin builtin for a shell name with no catalog entry' {
+        Get-CmdPeekCatalogOrigin -Entry $null -Command 'cd' | Should -Be 'builtin'
+        Get-CmdPeekCatalogOrigin -Entry $null -Command 'cmdpeek-no-such-binary' | Should -Be 'package'
+    }
+
+    It 'lets a catalog origin win over the live probe' {
+        $entry = [pscustomobject]@{ category = 'dev-tools'; origin = 'package' }
+        Get-CmdPeekCatalogOrigin -Entry $entry -Command 'cd' | Should -Be 'package'
+    }
+
+    It 'builds a builtin command card with no install line' {
+        $card = Get-CmdPeekCommandCard -Command 'cd' -Catalog @{} -History @()
+        $card.origin | Should -Be 'builtin'
+        @($card.installCommands) | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'learned catalog' {
     It 'writes help-probe usages for unknown commands and skips names already in the catalog' {
         $data = Join-Path $TestDrive 'learned-data'

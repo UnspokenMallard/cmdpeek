@@ -362,7 +362,7 @@ function Get-CmdPeekWhyCommand {
         substitutesInstalled = @($subsInstalled)
         substitutesMissing   = @($subsMissing)
         usages          = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 5)
-        origin          = Get-CmdPeekCatalogOrigin -Entry $entry
+        origin          = Get-CmdPeekCatalogOrigin -Entry $entry -Command $(if ($canonical) { $canonical } else { $Command })
         os              = @(Get-CmdPeekCatalogOsList -Entry $entry)
         shell           = @(Get-CmdPeekCatalogShellList -Entry $entry)
         gotchas         = @(Get-CmdPeekCatalogGotchaList -Entry $entry)

@@ -180,7 +180,9 @@ function Format-CmdPeekWhyOutput {
 
     $lines = New-Object System.Collections.Generic.List[string]
     $title = '{0}' -f $Result.command
-    if ($Result.PSObject.Properties['installed'] -and $Result.installed) { $title += '  installed' } else { $title += '  not installed' }
+    if ($Result.PSObject.Properties['installed'] -and $Result.installed) { $title += '  installed' }
+    elseif ($Result.PSObject.Properties['origin'] -and $Result.origin -eq 'builtin') { $title += '  builtin' }
+    else { $title += '  not installed' }
     if ($Result.PSObject.Properties['onPath'] -and $Result.onPath) { $title += '  on PATH' }
     $via = $null
     if ($Result.PSObject.Properties['onPathManager'] -and $Result.onPathManager) { $via = [string]$Result.onPathManager }
