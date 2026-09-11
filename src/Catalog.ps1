@@ -229,14 +229,52 @@ function Get-CmdPeekCurrentOs {
     return 'linux'
 }
 
+$script:CmdPeekShellBuiltinMemo = @{}
+
+function Test-CmdPeekShellBuiltinName {
+    [CmdletBinding()]
+    param(
+        [string]$Command
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
+    $key = $Command.ToLowerInvariant()
+    if ($script:CmdPeekShellBuiltinMemo.ContainsKey($key)) {
+        return [bool]$script:CmdPeekShellBuiltinMemo[$key]
+    }
+
+    $resolved = @()
+    try { $resolved = @(Get-Command -Name $Command -All -ErrorAction SilentlyContinue) } catch { $resolved = @() }
+
+    # An Application is a file on disk, so some package could have put it there and
+    # an install line is fair. Anything that only resolves as an alias, function, or
+    # cmdlet ships with the shell and cannot be installed by any manager.
+    $answer = $false
+    if ($resolved.Count -gt 0) {
+        $answer = $true
+        foreach ($item in $resolved) {
+            if ($item.CommandType -eq 'Application') { $answer = $false; break }
+        }
+    }
+
+    $script:CmdPeekShellBuiltinMemo[$key] = $answer
+    return $answer
+}
+
 function Get-CmdPeekCatalogOrigin {
     [CmdletBinding()]
-    param($Entry)
+    param(
+        $Entry,
+        [string]$Command
+    )
 
     if ($Entry -and $Entry.PSObject.Properties['origin'] -and $Entry.origin) {
         return ([string]$Entry.origin).ToLowerInvariant()
     }
     if (Test-CmdPeekCatalogIsBuiltin -Entry $Entry) { return 'builtin' }
+    # With no catalog entry there is nothing to read an origin from, and guessing
+    # "package" is how cmdpeek ended up calling cd installable. Ask the shell.
+    if (-not $Entry -and (Test-CmdPeekShellBuiltinName -Command $Command)) { return 'builtin' }
     return 'package'
 }
 
@@ -552,6 +590,13 @@ function Get-CmdPeekInstallCommands {
         if ($map.Count -eq 0) { return @() }
     }
 
+    # No install map means every line below is a guess built from the name alone.
+    # That guess is useful for a real package the catalog has not learned yet, and
+    # actively harmful for a shell builtin: "scoop install cd" is not a thing.
+    if ($map.Count -eq 0 -and (Test-CmdPeekShellBuiltinName -Command $Command)) {
+        return @()
+    }
+
     $lines = New-Object System.Collections.Generic.List[string]
     foreach ($manager in $order) {
         $id = $Command
@@ -845,7 +890,7 @@ function Get-CmdPeekCommandCard {
     return [pscustomobject]@{
         command         = $(if ($canonical) { $canonical } else { $Command })
         queried         = $Command
-        origin          = Get-CmdPeekCatalogOrigin -Entry $entry
+        origin          = Get-CmdPeekCatalogOrigin -Entry $entry -Command $(if ($canonical) { $canonical } else { $Command })
         os              = @(Get-CmdPeekCatalogOsList -Entry $entry)
         shell           = @(Get-CmdPeekCatalogShellList -Entry $entry)
         category        = $(if ($entry -and $entry.PSObject.Properties['category'] -and $entry.category) { [string]$entry.category } else { 'other' })

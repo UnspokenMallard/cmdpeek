@@ -194,6 +194,18 @@ Invoke-CmdPeekSmokeCase -Name 'resolve task' -Argument @('for', 'json', '-Json')
 Invoke-CmdPeekSmokeCase -Name 'explain' -Argument @('explain', 'cd') -Check {
     param($r)
     if ($r.StdOut.Trim().Length -lt 5) { 'explain produced almost nothing' }
+    # cd is a shell alias on every platform cmdpeek runs on, so there is no package
+    # to install and no manager that could install one. Offering a line here is the
+    # exact hallucination cmdpeek exists to stop.
+    if ($r.StdOut -match '(?im)^\s*install:') { 'explain offered to install a shell builtin' }
+    if ($r.StdOut -notmatch '(?im)builtin') { 'explain did not recognise a shell builtin' }
+}
+
+Invoke-CmdPeekSmokeCase -Name 'explain catalog entry' -Argument @('explain', 'jq') -Check {
+    param($r)
+    foreach ($field in @('origin:', 'when:')) {
+        if ($r.StdOut -notmatch [regex]::Escape($field)) { "explain omitted $field" }
+    }
 }
 
 Invoke-CmdPeekSmokeCase -Name 'system list' -Argument @('-Json', '-Category', 'system') -ExpectJson
