@@ -396,3 +396,96 @@ Describe 'Get-CmdPeekOpenAiExample' {
         }
     }
 }
+
+Describe 'Get-CmdPeekCatalogLookup' {
+    BeforeEach { Clear-CmdPeekCatalogLookup }
+
+    It 'resolves catalog keys and aliases without walking the catalog' {
+        $catalog = @{
+            'rg' = [pscustomobject]@{ aliases = @('ripgrep'); category = 'dev-tools' }
+            'jq' = [pscustomobject]@{ aliases = @(); category = 'dev-tools' }
+        }
+        (Get-CmdPeekCatalogEntry -Command 'RIPGREP' -Catalog $catalog).category | Should -Be 'dev-tools'
+        Get-CmdPeekCatalogEntry -Command 'nope' -Catalog $catalog | Should -BeNullOrEmpty
+        Get-CmdPeekCanonicalCommand -Command 'ripgrep' -Catalog $catalog | Should -Be 'rg'
+        Get-CmdPeekCanonicalCommand -Command 'nope' -Catalog $catalog | Should -Be 'nope'
+    }
+
+    It 'prefers a real catalog key over another entry alias' {
+        $catalog = @{
+            'find' = [pscustomobject]@{ aliases = @(); category = 'files' }
+            'fd'   = [pscustomobject]@{ aliases = @('find'); category = 'files' }
+        }
+        Get-CmdPeekCanonicalCommand -Command 'find' -Catalog $catalog | Should -Be 'find'
+    }
+
+    It 'rebuilds when a different catalog is passed' {
+        $first = @{ 'jq' = [pscustomobject]@{ aliases = @(); category = 'dev-tools' } }
+        $second = @{ 'fd' = [pscustomobject]@{ aliases = @(); category = 'files' } }
+        Get-CmdPeekCatalogEntry -Command 'jq' -Catalog $first | Should -Not -BeNullOrEmpty
+        Get-CmdPeekCatalogEntry -Command 'jq' -Catalog $second | Should -BeNullOrEmpty
+        Get-CmdPeekCatalogEntry -Command 'fd' -Catalog $second | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Add-CmdPeekUsageProbe budget' {
+    BeforeAll {
+        $script:probeRunner = {
+            param($Command)
+            return "Usage: $Command [options]`n  --flag   do a thing"
+        }
+    }
+
+    It 'probes every row when the limit is zero' {
+        $rows = @(
+            foreach ($i in 1..5) {
+                [pscustomobject]@{ Command = ('tool{0}' -f $i); PackageManager = 'path'; Origin = 'path' }
+            }
+        )
+        $out = @(Add-CmdPeekUsageProbe -History $rows -Catalog @{} -HelpRunner $script:probeRunner -Limit 0)
+        @($out | Where-Object { $_.PSObject.Properties['HelpProbed'] -and $_.HelpProbed }).Count | Should -Be 5
+    }
+
+    It 'returns every row but only probes up to the limit' {
+        $rows = @(
+            foreach ($i in 1..10) {
+                [pscustomobject]@{ Command = ('tool{0}' -f $i); PackageManager = 'path'; Origin = 'path' }
+            }
+        )
+        $out = @(Add-CmdPeekUsageProbe -History $rows -Catalog @{} -HelpRunner $script:probeRunner -Limit 3)
+        $out.Count | Should -Be 10
+        @($out | Where-Object { $_.PSObject.Properties['HelpProbed'] -and $_.HelpProbed }).Count | Should -Be 3
+    }
+
+    It 'spends the budget on package rows before bin-directory scan rows' {
+        $rows = @(
+            [pscustomobject]@{ Command = 'scanned'; PackageManager = 'path'; Origin = 'path' }
+            [pscustomobject]@{ Command = 'installed'; PackageManager = 'scoop'; Origin = 'package' }
+        )
+        $out = @(Add-CmdPeekUsageProbe -History $rows -Catalog @{} -HelpRunner $script:probeRunner -Limit 1)
+        $probed = @($out | Where-Object { $_.PSObject.Properties['HelpProbed'] -and $_.HelpProbed })
+        $probed.Count | Should -Be 1
+        $probed[0].Command | Should -Be 'installed'
+    }
+
+    It 'prefers favorites over everything else' {
+        $rows = @(
+            [pscustomobject]@{ Command = 'installed'; PackageManager = 'scoop'; Origin = 'package'; Favorite = $false }
+            [pscustomobject]@{ Command = 'starred'; PackageManager = 'path'; Origin = 'path'; Favorite = $true }
+        )
+        $out = @(Add-CmdPeekUsageProbe -History $rows -Catalog @{} -HelpRunner $script:probeRunner -Limit 1)
+        $probed = @($out | Where-Object { $_.PSObject.Properties['HelpProbed'] -and $_.HelpProbed })
+        $probed[0].Command | Should -Be 'starred'
+    }
+
+    It 'leaves unprobed rows with an empty usage list rather than no property' {
+        $rows = @(
+            [pscustomobject]@{ Command = 'a'; PackageManager = 'path'; Origin = 'path' }
+            [pscustomobject]@{ Command = 'b'; PackageManager = 'path'; Origin = 'path' }
+        )
+        $out = @(Add-CmdPeekUsageProbe -History $rows -Catalog @{} -HelpRunner $script:probeRunner -Limit 1)
+        foreach ($row in $out) {
+            $row.PSObject.Properties['Usages'] | Should -Not -BeNullOrEmpty
+        }
+    }
+}

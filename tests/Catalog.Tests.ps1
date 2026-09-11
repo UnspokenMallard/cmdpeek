@@ -144,3 +144,39 @@ Describe 'learned catalog' {
         @(Get-CmdPeekCatalogUsageList -Entry $merged['mysterycli'])[0] | Should -Match 'mysterycli status'
     }
 }
+
+Describe 'Get-CmdPeekSubstituteCoverage' {
+    BeforeEach { Clear-CmdPeekSubstituteCoverage }
+
+    It 'reports names an installed tool already substitutes for' {
+        $catalog = @{
+            'rg'   = [pscustomobject]@{ aliases = @('ripgrep'); substitutes = @('grep', 'findstr') }
+            'grep' = [pscustomobject]@{ aliases = @() }
+        }
+        $installed = @{ 'rg' = $true }
+        $coverage = Get-CmdPeekSubstituteCoverage -InstalledSet $installed -Catalog $catalog
+        $coverage.ContainsKey('grep') | Should -BeTrue
+        $coverage.ContainsKey('findstr') | Should -BeTrue
+        $coverage.ContainsKey('jq') | Should -BeFalse
+    }
+
+    It 'keeps Test-CmdPeekNameCovered answering through substitutes' {
+        $catalog = @{
+            'rg'   = [pscustomobject]@{ aliases = @(); substitutes = @('grep') }
+            'grep' = [pscustomobject]@{ aliases = @() }
+            'jq'   = [pscustomobject]@{ aliases = @() }
+        }
+        $installed = @{ 'rg' = $true }
+        Test-CmdPeekNameCovered -Name 'grep' -InstalledSet $installed -Catalog $catalog | Should -BeTrue
+        Test-CmdPeekNameCovered -Name 'jq' -InstalledSet $installed -Catalog $catalog | Should -BeFalse
+    }
+
+    It 'does not reuse coverage across different installed sets' {
+        $catalog = @{
+            'rg'   = [pscustomobject]@{ aliases = @(); substitutes = @('grep') }
+            'grep' = [pscustomobject]@{ aliases = @() }
+        }
+        Test-CmdPeekNameCovered -Name 'grep' -InstalledSet @{ 'rg' = $true } -Catalog $catalog | Should -BeTrue
+        Test-CmdPeekNameCovered -Name 'grep' -InstalledSet @{ 'jq' = $true } -Catalog $catalog | Should -BeFalse
+    }
+}

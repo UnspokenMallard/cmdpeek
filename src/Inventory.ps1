@@ -580,7 +580,7 @@ function Get-CmdPeekInventory {
 
     $history = @(Get-CmdPeekCommandHistory -Package $packages)
     $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath -DataDirectory $DataDirectory
-    $history = @(Add-CmdPeekPathCommands -History $history -Catalog $catalog -CommandTester $CommandTester -IncludeSystemDirectories)
+    $history = @(Add-CmdPeekPathCommands -History $history -Catalog $catalog -CommandTester $CommandTester -IncludeSystemDirectories -DataDirectory $DataDirectory)
     $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog -DataDirectory $DataDirectory)
 
     $state = Get-CmdPeekState -DataDirectory $DataDirectory

@@ -24,7 +24,7 @@ function Invoke-CmdPeek {
         [string]$Category,
         [switch]$NonInteractive,
         [string]$Reinstall,
-        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')]
         [string]$Manager,
         [string]$Export,
         [string]$Import,
@@ -72,8 +72,11 @@ function Invoke-CmdPeek {
         [string[]]$BinRoot,
         [string[]]$GapKind,
         [int]$GapLimit = -1,
-        [int]$TaskLimit = 0
+        [int]$TaskLimit = 0,
+        [int]$ProbeLimit = -1
     )
+
+    if ($ProbeLimit -lt 0) { $ProbeLimit = 25 }
 
     if ($Recent) {
         $Json = $true
@@ -153,6 +156,26 @@ function Invoke-CmdPeek {
         return
     }
 
+    # Only the unfiltered inventory is cacheable. A -Search/-Category/-Count run produces a
+    # subset, and writing that to the cache would hand the next caller a partial machine.
+    $fullInventoryJson = $Json -and -not $Gaps -and -not $HumanGaps -and -not $Search -and -not $Category
+
+    # Served before the scan, not after: the package managers and bin directories are the
+    # expensive part, so a cache checked further down would save nothing.
+    if ($fullInventoryJson -and -not $Refresh) {
+        $cachedState = Get-CmdPeekState -DataDirectory $DataDirectory
+        $cached = Get-CmdPeekInventoryCache -DataDirectory $DataDirectory -State $cachedState
+        if ($cached) {
+            if ($Count -gt 0 -and $cached.PSObject.Properties['commands']) {
+                $cached.commands = @(@($cached.commands) | Select-Object -First $Count)
+            }
+            $cached | Add-Member lastPeekAt $cachedState.LastPeekAt -Force
+            $cached | Add-Member lastMcpAt $cachedState.LastMcpAt -Force
+            Write-Output ($cached | ConvertTo-Json -Depth 10)
+            return
+        }
+    }
+
     $managerNames = @()
     if ($PSBoundParameters.ContainsKey('EnabledManagers')) {
         $managerNames = @($EnabledManagers)
@@ -211,6 +234,7 @@ function Invoke-CmdPeek {
             History       = $history
             Catalog       = $catalog
             CommandTester = $CommandTester
+            DataDirectory = $DataDirectory
         }
         if ($PSBoundParameters.ContainsKey('BinRoot')) {
             $pathArgs.BinRoot = $BinRoot
@@ -353,7 +377,7 @@ function Invoke-CmdPeek {
         $card = Get-CmdPeekCommandCard -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
         $exact = @(Select-CmdPeekExactCommand -History $history -Query $Explain)
         if ($exact.Count -eq 1) {
-            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit 0)
             if ($probed.Count -gt 0 -and $probed[0].PSObject.Properties['Usages']) {
                 $card.usages = @($probed[0].Usages)
                 $card.usageDetails = @(ConvertTo-CmdPeekStructuredUsage -Usage @($probed[0].Usages))
@@ -437,16 +461,7 @@ function Invoke-CmdPeek {
     }
 
     if ($Json -or $Gaps -or $HumanGaps) {
-        if ($Json -and -not $Gaps -and -not $HumanGaps -and -not $Refresh) {
-            $cached = Get-CmdPeekInventoryCache -DataDirectory $DataDirectory
-            if ($cached) {
-                $cached | Add-Member lastPeekAt $state.LastPeekAt -Force
-                $cached | Add-Member lastMcpAt $state.LastMcpAt -Force
-                Write-Output ($cached | ConvertTo-Json -Depth 10)
-                return
-            }
-        }
-        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit $ProbeLimit)
         $snapArgs = @{
             History        = $history
             Manager        = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
@@ -486,12 +501,14 @@ function Invoke-CmdPeek {
             }
         }
         else {
+            $snapshot | Add-Member lastPeekAt $state.LastPeekAt -Force
+            $snapshot | Add-Member lastMcpAt $state.LastMcpAt -Force
+            if ($fullInventoryJson) {
+                Save-CmdPeekInventoryCache -Snapshot $snapshot -DataDirectory $DataDirectory
+            }
             if ($Count -gt 0) {
                 $snapshot.commands = @($snapshot.commands | Select-Object -First $Count)
             }
-            $snapshot | Add-Member lastPeekAt $state.LastPeekAt -Force
-            $snapshot | Add-Member lastMcpAt $state.LastMcpAt -Force
-            Save-CmdPeekInventoryCache -Snapshot $snapshot -DataDirectory $DataDirectory
             Write-Output ($snapshot | ConvertTo-Json -Depth 10)
         }
         return
@@ -559,12 +576,12 @@ function Invoke-CmdPeek {
                 $whyRow = Get-CmdPeekWhyCommand -Command $row.Command -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
                 $row | Add-Member -NotePropertyName SubstitutesInstalled -NotePropertyValue @($whyRow.substitutesInstalled) -Force
                 $row | Add-Member -NotePropertyName InstallCommands -NotePropertyValue @($whyRow.installCommands) -Force
-                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit 0)
                 Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 5 -CheatSheet)
                 return
             }
             if ($exact.Count -gt 1) {
-                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit 0)
                 Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
                 return
             }
@@ -680,6 +697,7 @@ Export-ModuleMember -Function @(
     'Set-CmdPeekPreferredPackageManager'
     'Export-CmdPeekState'
     'Import-CmdPeekState'
+    'ConvertTo-CmdPeekState'
     'Get-CmdPeekUsageExample'
     'Get-CmdPeekExampleCatalog'
     'Get-CmdPeekCatalogKits'

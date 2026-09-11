@@ -179,6 +179,30 @@ export function summarizeSnapshot(snap: SnapshotShape): SnapshotSummary {
   };
 }
 
+// Keep in step with Install-CmdPeekTrackedPackage in src/InteractiveMode.ps1.
+export function installCommandFor(manager: string, packageId: string): string {
+  switch (manager) {
+    case "chocolatey":
+      return `choco install ${packageId} -y`;
+    case "winget":
+      return `winget install --id ${packageId} -e --accept-package-agreements --accept-source-agreements`;
+    case "pipx":
+      return `pipx install ${packageId}`;
+    case "npm":
+      return `npm install -g ${packageId}`;
+    case "cargo":
+      return `cargo install ${packageId}`;
+    case "brew":
+      return `brew install ${packageId}`;
+    case "apt":
+      return `sudo apt install -y ${packageId}`;
+    case "pacman":
+      return `sudo pacman -S --noconfirm ${packageId}`;
+    default:
+      return `scoop install ${packageId}`;
+  }
+}
+
 export function isBuiltinCatalog<
   T extends { origin?: string; install?: Record<string, unknown> },
 >(entry: T | undefined): boolean {

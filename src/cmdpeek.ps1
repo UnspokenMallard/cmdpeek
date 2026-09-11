@@ -33,7 +33,7 @@ param(
 
     [string]$Reinstall,
 
-    [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
+    [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')]
     [string]$Manager,
 
     [string]$Export,
@@ -48,6 +48,8 @@ param(
     [string[]]$GapKind,
 
     [int]$GapLimit = -1,
+
+    [int]$ProbeLimit = -1,
 
     [string]$Since,
 
@@ -216,6 +218,7 @@ if ($Json) { $invoke.Json = $true }
 if ($Gaps) { $invoke.Gaps = $true }
 if ($GapKind) { $invoke.GapKind = $GapKind }
 if ($PSBoundParameters.ContainsKey('GapLimit')) { $invoke.GapLimit = $GapLimit }
+if ($PSBoundParameters.ContainsKey('ProbeLimit')) { $invoke.ProbeLimit = $ProbeLimit }
 if ($Since) { $invoke.Since = $Since }
 if ($Recent) { $invoke.Recent = $true }
 if ($Rusty) { $invoke.Rusty = $true }

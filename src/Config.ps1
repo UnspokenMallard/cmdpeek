@@ -42,6 +42,7 @@ function Get-CmdPeekDefaultState {
         Hidden                    = @()
         PreferredPackageManager   = $null
         CacheTtlHours             = 24
+        InventoryCacheSeconds     = 120
         LastScan                  = $null
         LastPeekAt                = $null
         LastMcpAt                 = $null
@@ -79,6 +80,9 @@ function Get-CmdPeekState {
     }
     if ($raw.PSObject.Properties['CacheTtlHours'] -and $raw.CacheTtlHours) {
         $state.CacheTtlHours = [int]$raw.CacheTtlHours
+    }
+    if ($raw.PSObject.Properties['InventoryCacheSeconds'] -and $null -ne $raw.InventoryCacheSeconds) {
+        $state.InventoryCacheSeconds = [int]$raw.InventoryCacheSeconds
     }
     if ($raw.PSObject.Properties['LastScan']) {
         $state.LastScan = $raw.LastScan
@@ -184,7 +188,7 @@ function Set-CmdPeekPreferredPackageManager {
         [Parameter(Mandatory)]
         [object]$State,
         [Parameter(Mandatory)]
-        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')]
         [string]$PackageManager
     )
 
@@ -209,6 +213,72 @@ function Export-CmdPeekState {
     Set-Content -LiteralPath $Path -Value $json -Encoding UTF8
 }
 
+function ConvertTo-CmdPeekState {
+    [CmdletBinding()]
+    param($Raw)
+
+    # Anything that reaches state.json has to survive Get-CmdPeekState under
+    # StrictMode, so coerce an arbitrary document onto the known schema instead of
+    # writing it through untouched.
+    $state = Get-CmdPeekDefaultState
+    if (-not $Raw) { return $state }
+
+    $version = 1
+    if ($Raw.PSObject.Properties['SchemaVersion'] -and $Raw.SchemaVersion) {
+        $version = [int]$Raw.SchemaVersion
+    }
+    if ($version -gt $state.SchemaVersion) {
+        throw "State file uses schema version $version but this cmdpeek understands $($state.SchemaVersion). Upgrade cmdpeek or export a fresh state."
+    }
+
+    if ($Raw.PSObject.Properties['Favorites'] -and $Raw.Favorites) {
+        $state.Favorites = @($Raw.Favorites | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    }
+    if ($Raw.PSObject.Properties['Hidden'] -and $Raw.Hidden) {
+        $state.Hidden = @($Raw.Hidden | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    }
+    if ($Raw.PSObject.Properties['PreferredPackageManager'] -and $Raw.PreferredPackageManager) {
+        $pm = ([string]$Raw.PreferredPackageManager).ToLowerInvariant()
+        $known = @('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')
+        if ($known -contains $pm) { $state.PreferredPackageManager = $pm }
+    }
+    foreach ($name in @('CacheTtlHours', 'InventoryCacheSeconds')) {
+        if ($Raw.PSObject.Properties[$name] -and $null -ne $Raw.$name) {
+            $parsed = 0
+            if ([int]::TryParse([string]$Raw.$name, [ref]$parsed) -and $parsed -ge 0) {
+                $state.$name = $parsed
+            }
+        }
+    }
+    foreach ($name in @('LastScan', 'LastPeekAt', 'LastMcpAt')) {
+        if (-not ($Raw.PSObject.Properties[$name]) -or -not $Raw.$name) { continue }
+        $value = $Raw.$name
+        if ($value -is [datetime]) {
+            $state.$name = ([datetime]$value).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+            continue
+        }
+        $when = [datetime]::MinValue
+        if ([datetime]::TryParse([string]$value, [ref]$when)) {
+            $state.$name = $when.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+        }
+    }
+    if ($Raw.PSObject.Properties['Commands'] -and $Raw.Commands) {
+        $state.Commands = @(
+            foreach ($row in @($Raw.Commands)) {
+                if (-not $row -or -not $row.PSObject.Properties['Command'] -or -not $row.Command) { continue }
+                [pscustomobject]@{
+                    Command        = [string]$row.Command
+                    PackageName    = $(if ($row.PSObject.Properties['PackageName']) { [string]$row.PackageName } else { [string]$row.Command })
+                    PackageManager = $(if ($row.PSObject.Properties['PackageManager']) { [string]$row.PackageManager } else { '' })
+                    InstallDate    = $(if ($row.PSObject.Properties['InstallDate']) { $row.InstallDate } else { $null })
+                    Version        = $(if ($row.PSObject.Properties['Version']) { $row.Version } else { $null })
+                }
+            }
+        )
+    }
+    return $state
+}
+
 function Import-CmdPeekState {
     [CmdletBinding()]
     param(
@@ -221,8 +291,13 @@ function Import-CmdPeekState {
         throw "Backup file not found: $Path"
     }
 
-    $imported = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
-    Save-CmdPeekState -State $imported -DataDirectory $DataDirectory
+    try {
+        $imported = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        throw "Backup file is not valid JSON: $Path"
+    }
+    Save-CmdPeekState -State (ConvertTo-CmdPeekState -Raw $imported) -DataDirectory $DataDirectory
 }
 
 function Add-CmdPeekProfileHint {
@@ -424,12 +499,40 @@ function Save-CmdPeekInventoryCache {
     ($Snapshot | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $path -Encoding UTF8
 }
 
+function Get-CmdPeekInventoryCacheSeconds {
+    [CmdletBinding()]
+    param(
+        [string]$DataDirectory,
+        $State
+    )
+
+    if ($env:CMDPEEK_INVENTORY_CACHE_SECONDS) {
+        $parsed = 0
+        if ([int]::TryParse($env:CMDPEEK_INVENTORY_CACHE_SECONDS, [ref]$parsed) -and $parsed -ge 0) {
+            return $parsed
+        }
+    }
+    if (-not $State) {
+        try { $State = Get-CmdPeekState -DataDirectory $DataDirectory } catch { $State = $null }
+    }
+    if ($State -and $State.PSObject.Properties['InventoryCacheSeconds'] -and $null -ne $State.InventoryCacheSeconds) {
+        return [int]$State.InventoryCacheSeconds
+    }
+    return 120
+}
+
 function Get-CmdPeekInventoryCache {
     [CmdletBinding()]
     param(
         [string]$DataDirectory,
-        [int]$MaxAgeSeconds = 120
+        [int]$MaxAgeSeconds = -1,
+        $State
     )
+
+    if ($MaxAgeSeconds -lt 0) {
+        $MaxAgeSeconds = Get-CmdPeekInventoryCacheSeconds -DataDirectory $DataDirectory -State $State
+    }
+    if ($MaxAgeSeconds -eq 0) { return $null }
 
     $path = Get-CmdPeekInventoryCachePath -DataDirectory $DataDirectory
     if (-not (Test-Path -LiteralPath $path)) { return $null }

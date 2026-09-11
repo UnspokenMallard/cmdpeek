@@ -131,6 +131,62 @@ function Get-CmdPeekCatalogKits {
     return $kits
 }
 
+$script:CmdPeekCatalogLookupCache = New-Object System.Collections.Generic.List[object]
+$script:CmdPeekCatalogLookupCacheMax = 4
+
+function Clear-CmdPeekCatalogLookup {
+    [CmdletBinding()]
+    param()
+    $script:CmdPeekCatalogLookupCache = New-Object System.Collections.Generic.List[object]
+}
+
+function Get-CmdPeekCatalogLookup {
+    [CmdletBinding()]
+    param(
+        [hashtable]$Catalog
+    )
+
+    if (-not $Catalog) { return $null }
+
+    # Name resolution used to walk every catalog key and alias per lookup, which is
+    # quadratic once the caller is iterating thousands of PATH entries. The catalog
+    # is built once and never mutated, so index it by reference and reuse it.
+    foreach ($slot in $script:CmdPeekCatalogLookupCache) {
+        if ([object]::ReferenceEquals($slot.Catalog, $Catalog) -and $slot.Count -eq $Catalog.Count) {
+            return $slot.Lookup
+        }
+    }
+
+    $byName = @{}
+    $canonical = @{}
+    foreach ($key in $Catalog.Keys) {
+        $lk = ([string]$key).ToLowerInvariant()
+        if ($byName.ContainsKey($lk)) { continue }
+        $byName[$lk] = $Catalog[$key]
+        $canonical[$lk] = [string]$key
+    }
+    foreach ($key in $Catalog.Keys) {
+        foreach ($alias in @(Get-CmdPeekCatalogAliasList -Entry $Catalog[$key])) {
+            if (-not $alias) { continue }
+            $la = ([string]$alias).ToLowerInvariant()
+            if ($byName.ContainsKey($la)) { continue }
+            $byName[$la] = $Catalog[$key]
+            $canonical[$la] = [string]$key
+        }
+    }
+
+    $lookup = [pscustomobject]@{ ByName = $byName; Canonical = $canonical }
+    $script:CmdPeekCatalogLookupCache.Add([pscustomobject]@{
+        Catalog = $Catalog
+        Count   = $Catalog.Count
+        Lookup  = $lookup
+    })
+    while ($script:CmdPeekCatalogLookupCache.Count -gt $script:CmdPeekCatalogLookupCacheMax) {
+        $script:CmdPeekCatalogLookupCache.RemoveAt(0)
+    }
+    return $lookup
+}
+
 function Get-CmdPeekCatalogEntry {
     param(
         [string]$Command,
@@ -138,20 +194,9 @@ function Get-CmdPeekCatalogEntry {
     )
 
     if (-not $Catalog -or -not $Command) { return $null }
+    $lookup = Get-CmdPeekCatalogLookup -Catalog $Catalog
     $needle = $Command.ToLowerInvariant()
-    foreach ($key in $Catalog.Keys) {
-        if ($key.ToLowerInvariant() -eq $needle) {
-            return $Catalog[$key]
-        }
-    }
-    foreach ($key in $Catalog.Keys) {
-        $aliases = @(Get-CmdPeekCatalogAliasList -Entry $Catalog[$key])
-        foreach ($alias in $aliases) {
-            if ($alias.ToLowerInvariant() -eq $needle) {
-                return $Catalog[$key]
-            }
-        }
-    }
+    if ($lookup.ByName.ContainsKey($needle)) { return $lookup.ByName[$needle] }
     return $null
 }
 
@@ -519,6 +564,66 @@ function Test-CmdPeekCrashHelpText {
 
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     return [bool]($Text -match '(?i)(FATAL ERROR|JavaScript heap out of memory|Native stack trace|OutOfMemoryException|AccessViolation|Unhandled exception|CmdLineException|Syntax error of parameter|Allocation failed|IsTerminatingError)')
+}
+
+function Get-CmdPeekPeSubsystemCachePath {
+    [CmdletBinding()]
+    param([string]$DataDirectory)
+
+    if (-not $DataDirectory) {
+        if (-not (Get-Command Get-CmdPeekDataDirectory -ErrorAction SilentlyContinue)) { return $null }
+        $DataDirectory = Get-CmdPeekDataDirectory
+    }
+    if (-not $DataDirectory) { return $null }
+    return (Join-Path $DataDirectory 'pe-subsystem-cache.json')
+}
+
+function Import-CmdPeekPeSubsystemCache {
+    [CmdletBinding()]
+    param([string]$Path)
+
+    $map = @{}
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $map }
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        return $map
+    }
+    if (-not $raw -or -not $raw.PSObject.Properties['entries'] -or -not $raw.entries) { return $map }
+    foreach ($prop in $raw.entries.PSObject.Properties) {
+        $map[$prop.Name] = $prop.Value
+    }
+    return $map
+}
+
+function Export-CmdPeekPeSubsystemCache {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        [hashtable]$Entries
+    )
+
+    if (-not $Entries) { $Entries = @{} }
+    $dir = Split-Path -Parent $Path
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $obj = New-Object PSObject
+    foreach ($key in @($Entries.Keys | Sort-Object)) {
+        $obj | Add-Member -NotePropertyName ([string]$key) -NotePropertyValue $Entries[$key]
+    }
+    $payload = [pscustomobject]@{ schemaVersion = 1; entries = $obj }
+    ($payload | ConvertTo-Json -Depth 4 -Compress) | Set-Content -LiteralPath $Path -Encoding UTF8
+}
+
+function Get-CmdPeekPeSubsystemCacheKey {
+    [CmdletBinding()]
+    param($File)
+
+    if (-not $File) { return $null }
+    return ('{0}|{1}|{2}' -f $File.FullName, $File.Length, $File.LastWriteTimeUtc.Ticks)
 }
 
 function Get-CmdPeekPeSubsystem {
@@ -1025,6 +1130,27 @@ function Add-CmdPeekCatalogMetadata {
     }
 }
 
+function Get-CmdPeekUsageProbePriority {
+    [CmdletBinding()]
+    param($Row)
+
+    if (-not $Row) { return 9 }
+    $pm = ''
+    if ($Row.PSObject.Properties['PackageManager'] -and $Row.PackageManager) {
+        $pm = ([string]$Row.PackageManager).ToLowerInvariant()
+    }
+    $origin = ''
+    if ($Row.PSObject.Properties['Origin'] -and $Row.Origin) {
+        $origin = ([string]$Row.Origin).ToLowerInvariant()
+    }
+    if ($Row.PSObject.Properties['Favorite'] -and $Row.Favorite) { return 0 }
+    # Rows discovered by scanning a bin directory are the long tail; anything a
+    # package manager or the catalog knows about is far more likely to be asked about.
+    if ($pm -eq 'path' -and $origin -eq 'path') { return 3 }
+    if ($origin -eq 'builtin' -or $pm -eq 'builtin') { return 2 }
+    return 1
+}
+
 function Add-CmdPeekUsageProbe {
     [CmdletBinding()]
     param(
@@ -1034,14 +1160,46 @@ function Add-CmdPeekUsageProbe {
         [hashtable]$Catalog,
         [string]$DataDirectory,
         [scriptblock]$HelpRunner,
-        [scriptblock]$OpenAiRunner
+        [scriptblock]$OpenAiRunner,
+        [int]$Limit = 25
     )
+
+
+    # Probing means launching the binary with --help. On a machine with a populated
+    # bin directory there are thousands of candidates, so spend the budget on the
+    # rows a user is most likely to ask about and leave the rest for a later run.
+    $budget = @{}
+    if ($Limit -gt 0) {
+        $needsProbe = @(
+            foreach ($row in @($History)) {
+                if (-not $row -or -not $row.Command) { continue }
+                if ($row.PSObject.Properties['HelpProbed'] -and $row.HelpProbed) { continue }
+                if ($row.PSObject.Properties['Usages'] -and @($row.Usages).Count -gt 0) { continue }
+                $row
+            }
+        )
+        if ($needsProbe.Count -gt $Limit) {
+            $needsProbe = @(
+                $needsProbe |
+                    Sort-Object `
+                        @{ Expression = { Get-CmdPeekUsageProbePriority -Row $_ } }, `
+                        @{ Expression = { if ($_.PSObject.Properties['InstallDate'] -and $_.InstallDate) { [datetime]$_.InstallDate } else { [datetime]'2000-01-01' } }; Descending = $true } |
+                    Select-Object -First $Limit
+            )
+        }
+        foreach ($row in $needsProbe) { $budget[$row.Command.ToLowerInvariant()] = $true }
+    }
 
     foreach ($row in @($History)) {
         if (-not $row) { continue }
         $alreadyProbed = $row.PSObject.Properties['HelpProbed'] -and $row.HelpProbed
         $hasUsages = $row.PSObject.Properties['Usages'] -and @($row.Usages).Count -gt 0
         if ($alreadyProbed -or $hasUsages) {
+            $row
+            continue
+        }
+        if ($Limit -gt 0 -and -not $budget.ContainsKey(([string]$row.Command).ToLowerInvariant())) {
+            $row | Add-Member -NotePropertyName Usages -NotePropertyValue @() -Force
             $row
             continue
         }

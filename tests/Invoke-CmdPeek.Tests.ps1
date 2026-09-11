@@ -762,6 +762,82 @@ Describe 'Invoke-CmdPeek' {
     }
 }
 
+Describe 'Invoke-CmdPeek inventory cache' {
+    BeforeEach {
+        $script:cacheScoop = Join-Path $TestDrive ('cache-scoop-' + [guid]::NewGuid().ToString('N'))
+        $script:cacheData = Join-Path $TestDrive ('cache-data-' + [guid]::NewGuid().ToString('N'))
+        foreach ($pair in @(@('fd', '10.2.0'), @('jq', '1.7.1'))) {
+            $app = Join-Path (Join-Path $script:cacheScoop 'apps') (Join-Path $pair[0] 'current')
+            New-Item -ItemType Directory -Force -Path $app | Out-Null
+            ('{"version":"' + $pair[1] + '","bin":"' + $pair[0] + '.exe"}') |
+                Set-Content -Path (Join-Path $app 'manifest.json') -Encoding UTF8
+        }
+
+        $script:cachePeek = {
+            param([hashtable]$Extra = @{})
+            $splat = @{
+                Json            = $true
+                NonInteractive  = $true
+                EnabledManagers = @('scoop')
+                ScoopRoot       = $script:cacheScoop
+                ChocolateyRoot  = (Join-Path $TestDrive 'cache-none-choco')
+                WinGetRoot      = (Join-Path $TestDrive 'cache-none-winget')
+                DataDirectory   = $script:cacheData
+                ExamplesPath    = (Join-Path $PSScriptRoot '..\examples\usage-examples.json')
+                HistoryPath     = @()
+            }
+            foreach ($key in $Extra.Keys) { $splat[$key] = $Extra[$key] }
+            return ((Invoke-CmdPeek @splat | Out-String) | ConvertFrom-Json)
+        }
+    }
+
+    It 'serves a warm cache instead of rescanning the machine' {
+        @(& $script:cachePeek).commands.command | Should -Contain 'fd'
+
+        Remove-Item -LiteralPath (Join-Path $script:cacheScoop 'apps\fd') -Recurse -Force
+        @(& $script:cachePeek).commands.command | Should -Contain 'fd'
+    }
+
+    It 'rescans when -Refresh is passed' {
+        [void](& $script:cachePeek)
+        Remove-Item -LiteralPath (Join-Path $script:cacheScoop 'apps\fd') -Recurse -Force
+
+        @(& $script:cachePeek -Extra @{ Refresh = $true }).commands.command | Should -Not -Contain 'fd'
+    }
+
+    It 'ignores the cache when InventoryCacheSeconds is zero' {
+        [void](& $script:cachePeek)
+        $state = Get-CmdPeekState -DataDirectory $script:cacheData
+        $state.InventoryCacheSeconds = 0
+        Save-CmdPeekState -State $state -DataDirectory $script:cacheData
+        Remove-Item -LiteralPath (Join-Path $script:cacheScoop 'apps\fd') -Recurse -Force
+
+        @(& $script:cachePeek).commands.command | Should -Not -Contain 'fd'
+    }
+
+    It 'does not cache a -Search filtered inventory' {
+        [void](& $script:cachePeek -Extra @{ Search = 'fd' })
+
+        Test-Path -LiteralPath (Join-Path $script:cacheData 'inventory-cache.json') |
+            Should -BeFalse
+    }
+
+    It 'caches the whole inventory even when -Count truncates the output' {
+        @(& $script:cachePeek -Extra @{ Count = 1 }).commands.Count | Should -Be 1
+
+        $cached = Get-Content -LiteralPath (Join-Path $script:cacheData 'inventory-cache.json') `
+            -Raw -Encoding UTF8 | ConvertFrom-Json
+        @($cached.commands).command | Should -Contain 'fd'
+        @($cached.commands).command | Should -Contain 'jq'
+    }
+
+    It 'applies -Count to a cache hit' {
+        [void](& $script:cachePeek)
+
+        @(& $script:cachePeek -Extra @{ Count = 1 }).commands.Count | Should -Be 1
+    }
+}
+
 Describe 'usage-examples.json' {
     It 'is valid JSON with curated commands from the README' {
         $path = Join-Path $PSScriptRoot '..\examples\usage-examples.json'
