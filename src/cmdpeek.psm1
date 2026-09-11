@@ -13,6 +13,7 @@ $script:CmdPeekModuleRoot = $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TaskResolve.ps1')
 . (Join-Path $PSScriptRoot 'InteractiveMode.ps1')
 . (Join-Path $PSScriptRoot 'Inventory.ps1')
+. (Join-Path $PSScriptRoot 'CatalogLint.ps1')
 . (Join-Path $PSScriptRoot 'Doctor.ps1')
 . (Join-Path $PSScriptRoot 'Tui.ps1')
 
@@ -78,7 +79,9 @@ function Invoke-CmdPeek {
         [switch]$Doctor,
         [switch]$Timing,
         [switch]$Version,
-        [switch]$IncludeUndocumented
+        [switch]$IncludeUndocumented,
+        [switch]$CatalogLint,
+        [string[]]$CatalogPath
     )
 
     if ($ProbeLimit -lt 0) { $ProbeLimit = 25 }
@@ -104,7 +107,7 @@ function Invoke-CmdPeek {
     if ($NonInteractive) { $useInteractive = $false }
     if ($Rusty -and -not $Interactive) { $useInteractive = $false }
     if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport -or $Compare -or $Suggest) { $useInteractive = $false }
-    if ($Doctor -or $Version) { $useInteractive = $false }
+    if ($Doctor -or $Version -or $CatalogLint) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
@@ -126,6 +129,17 @@ function Invoke-CmdPeek {
             if (-not $ver.inSync) {
                 Write-Output "warning: mcp/package.json is $($ver.mcp), which does not match the module"
             }
+        }
+        return
+    }
+
+    if ($CatalogLint) {
+        $lint = Invoke-CmdPeekCatalogLint -Path $CatalogPath -ExamplesPath $ExamplesPath
+        if ($Json) {
+            Write-Output ($lint | ConvertTo-Json -Depth 7)
+        }
+        else {
+            Write-Output (Format-CmdPeekCatalogLint -Lint $lint)
         }
         return
     }
@@ -802,4 +816,10 @@ Export-ModuleMember -Function @(
     'Save-CmdPeekInventoryCache'
     'Get-CmdPeekInventoryCachePath'
     'Get-CmdPeekInventoryCacheSeconds'
+    'Test-CmdPeekCatalogFile'
+    'Test-CmdPeekJsonSchema'
+    'Get-CmdPeekCatalogCoverage'
+    'Format-CmdPeekCatalogLint'
+    'Invoke-CmdPeekCatalogLint'
+    'Get-CmdPeekCatalogFileList'
 )

@@ -53,6 +53,14 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate catalog files against the schema
+        shell: pwsh
+        run: ./src/cmdpeek.ps1 catalog-lint
+
   analyzer:
     runs-on: ubuntu-latest
     steps:

@@ -84,6 +84,12 @@
         'Save-CmdPeekInventoryCache'
         'Get-CmdPeekInventoryCachePath'
         'Get-CmdPeekInventoryCacheSeconds'
+        'Test-CmdPeekCatalogFile'
+        'Test-CmdPeekJsonSchema'
+        'Get-CmdPeekCatalogCoverage'
+        'Format-CmdPeekCatalogLint'
+        'Invoke-CmdPeekCatalogLint'
+        'Get-CmdPeekCatalogFileList'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
