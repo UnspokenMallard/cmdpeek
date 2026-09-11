@@ -13,6 +13,8 @@ $script:CmdPeekModuleRoot = $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TaskResolve.ps1')
 . (Join-Path $PSScriptRoot 'InteractiveMode.ps1')
 . (Join-Path $PSScriptRoot 'Inventory.ps1')
+. (Join-Path $PSScriptRoot 'CatalogLint.ps1')
+. (Join-Path $PSScriptRoot 'Doctor.ps1')
 . (Join-Path $PSScriptRoot 'Tui.ps1')
 
 function Invoke-CmdPeek {
@@ -24,7 +26,7 @@ function Invoke-CmdPeek {
         [string]$Category,
         [switch]$NonInteractive,
         [string]$Reinstall,
-        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')]
         [string]$Manager,
         [string]$Export,
         [string]$Import,
@@ -66,8 +68,23 @@ function Invoke-CmdPeek {
         [string]$LastUsedPath,
         [scriptblock]$OpenAiRunner,
         [switch]$AgentExport,
-        [string]$AgentExportPath
+        [string]$AgentExportPath,
+        [string]$Compare,
+        [string]$Suggest,
+        [string[]]$BinRoot,
+        [string[]]$GapKind,
+        [int]$GapLimit = -1,
+        [int]$TaskLimit = 0,
+        [int]$ProbeLimit = -1,
+        [switch]$Doctor,
+        [switch]$Timing,
+        [switch]$Version,
+        [switch]$IncludeUndocumented,
+        [switch]$CatalogLint,
+        [string[]]$CatalogPath
     )
+
+    if ($ProbeLimit -lt 0) { $ProbeLimit = 25 }
 
     if ($Recent) {
         $Json = $true
@@ -76,7 +93,7 @@ function Invoke-CmdPeek {
     if ($Json -or $Gaps -or $HumanGaps) {
         $NonInteractive = $true
     }
-    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $AgentExport) {
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $AgentExport -or $Compare -or $Suggest) {
         $NonInteractive = $true
     }
     if ($LastInstall) {
@@ -89,15 +106,58 @@ function Invoke-CmdPeek {
     $useInteractive = [bool]$Interactive -or ($Count -le 0 -and -not $Search -and -not $Category)
     if ($NonInteractive) { $useInteractive = $false }
     if ($Rusty -and -not $Interactive) { $useInteractive = $false }
-    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport) { $useInteractive = $false }
+    if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport -or $Compare -or $Suggest) { $useInteractive = $false }
+    if ($Doctor -or $Version -or $CatalogLint) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
     $isRecencyPath = [bool]$Recent -or (
-        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and -not $AgentExport -and (
+        -not $useInteractive -and -not $Json -and -not $Gaps -and -not $Rusty -and -not $Task -and -not $Why -and -not $Explain -and -not $SearchAvailable -and -not $Have -and -not $HumanGaps -and -not $AgentExport -and -not $Compare -and -not $Suggest -and (
             $Count -gt 0 -or (-not $Search -and -not $Category)
         )
     )
+
+    if ($Version) {
+        $ver = Get-CmdPeekVersion
+        if ($Json) {
+            Write-Output ($ver | ConvertTo-Json -Depth 4)
+        }
+        else {
+            $mcpVer = $ver.mcp
+            if (-not $mcpVer) { $mcpVer = 'not found' }
+            Write-Output "cmdpeek $($ver.module) (mcp $mcpVer, PowerShell $($ver.powerShell), $($ver.os))"
+            if (-not $ver.inSync) {
+                Write-Output "warning: mcp/package.json is $($ver.mcp), which does not match the module"
+            }
+        }
+        return
+    }
+
+    if ($CatalogLint) {
+        $lint = Invoke-CmdPeekCatalogLint -Path $CatalogPath -ExamplesPath $ExamplesPath
+        if ($Json) {
+            Write-Output ($lint | ConvertTo-Json -Depth 7)
+        }
+        else {
+            Write-Output (Format-CmdPeekCatalogLint -Lint $lint)
+        }
+        return
+    }
+
+    if ($Doctor) {
+        $doctorArgs = @{ DataDirectory = $DataDirectory; Timing = $Timing }
+        if ($ExamplesPath) { $doctorArgs.ExamplesPath = $ExamplesPath }
+        if ($CommandTester) { $doctorArgs.CommandTester = $CommandTester }
+        if ($PSBoundParameters.ContainsKey('HistoryPath')) { $doctorArgs.HistoryPath = $HistoryPath }
+        $report = Get-CmdPeekDoctorReport @doctorArgs
+        if ($Json) {
+            Write-Output ($report | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekDoctorReport -Report $report)
+        }
+        return
+    }
 
     # Validate -Since before scan/save so bogus values never advance LastPeekAt
     if ($isRecencyPath) {
@@ -145,6 +205,32 @@ function Invoke-CmdPeek {
         }
         Save-CmdPeekState -State $state -DataDirectory $DataDirectory
         return
+    }
+
+    # Only the unfiltered inventory is cacheable. Every other -Json caller wants its own
+    # payload, and a -Search/-Category/-Count run produces a subset, which would hand the
+    # next caller a partial machine if it were written to the cache.
+    # -Rusty -Json is deliberately absent: it emits the same full snapshot as plain -Json,
+    # with the rusty rows already inside it.
+    $jsonSubcommand = [bool]$Gaps -or [bool]$HumanGaps -or [bool]$Recent -or [bool]$LastInstall -or
+        [bool]$Task -or [bool]$Why -or [bool]$Explain -or [bool]$SearchAvailable -or
+        [bool]$Have -or [bool]$AgentExport -or [bool]$Compare -or [bool]$Suggest
+    $fullInventoryJson = $Json -and -not $jsonSubcommand -and -not $Search -and -not $Category
+
+    # Served before the scan, not after: the package managers and bin directories are the
+    # expensive part, so a cache checked further down would save nothing.
+    if ($fullInventoryJson -and -not $Refresh) {
+        $cachedState = Get-CmdPeekState -DataDirectory $DataDirectory
+        $cached = Get-CmdPeekInventoryCache -DataDirectory $DataDirectory -State $cachedState
+        if ($cached) {
+            if ($Count -gt 0 -and $cached.PSObject.Properties['commands']) {
+                $cached.commands = @(@($cached.commands) | Select-Object -First $Count)
+            }
+            $cached | Add-Member lastPeekAt $cachedState.LastPeekAt -Force
+            $cached | Add-Member lastMcpAt $cachedState.LastMcpAt -Force
+            Write-Output ($cached | ConvertTo-Json -Depth 10)
+            return
+        }
     }
 
     $managerNames = @()
@@ -201,7 +287,19 @@ function Invoke-CmdPeek {
     $catalog = Get-CmdPeekExampleCatalog -Path $ExamplesPath -DataDirectory $DataDirectory
     $includePath = -not $PSBoundParameters.ContainsKey('EnabledManagers') -or (@($managerNames) -contains 'path')
     if ($includePath) {
-        $history = @(Add-CmdPeekPathCommands -History $history -Catalog $catalog -CommandTester $CommandTester)
+        $pathArgs = @{
+            History       = $history
+            Catalog       = $catalog
+            CommandTester = $CommandTester
+            DataDirectory = $DataDirectory
+        }
+        if ($PSBoundParameters.ContainsKey('BinRoot')) {
+            $pathArgs.BinRoot = $BinRoot
+        }
+        else {
+            $pathArgs.IncludeSystemDirectories = $true
+        }
+        $history = @(Add-CmdPeekPathCommands @pathArgs)
     }
     $history = @(Add-CmdPeekCatalogMetadata -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -SkipHelpProbe)
 
@@ -210,6 +308,16 @@ function Invoke-CmdPeek {
     $history = @(Merge-CmdPeekHidden -History $history -Hidden @($state.Hidden))
 
     $missing = @(Find-CmdPeekMissingCommand -Previous @($state.Commands) -Current $history)
+    $missing = @(
+        $missing | Where-Object {
+            if (-not $_) { return $false }
+            $pm = ''
+            if ($_.PSObject.Properties['PackageManager'] -and $_.PackageManager) {
+                $pm = ([string]$_.PackageManager).ToLowerInvariant()
+            }
+            return ($pm -notin @('builtin', 'path'))
+        }
+    )
     if ($missing.Count -gt 0) {
         if ($useInteractive) {
             $state = Confirm-CmdPeekMissingCommand -Missing $missing -Managers $managers -State $state
@@ -228,7 +336,14 @@ function Invoke-CmdPeek {
     $preferred = $state.PreferredPackageManager
 
     if ($Task) {
-        $resolved = Resolve-CmdPeekTask -Task $Task -History $history -Catalog $catalog -PreferredManager $preferred
+        $taskArgs = @{
+            Task             = $Task
+            History          = $history
+            Catalog          = $catalog
+            PreferredManager = $preferred
+        }
+        if ($TaskLimit -gt 0) { $taskArgs.Limit = $TaskLimit }
+        $resolved = Resolve-CmdPeekTask @taskArgs
         if ($Json) {
             Write-Output ($resolved | ConvertTo-Json -Depth 8)
         }
@@ -245,6 +360,35 @@ function Invoke-CmdPeek {
         }
         else {
             Write-Output (Format-CmdPeekWhyOutput -Result $whyRow)
+        }
+        return
+    }
+
+    if ($Compare) {
+        $bits = @($Compare.Trim() -split '\s+', 3)
+        $left = $bits[0]
+        $right = $(if ($bits.Count -gt 1) { $bits[1] } else { '' })
+        if (-not $left -or -not $right) {
+            Write-Output "Usage: cmdpeek compare <command> <command>`n"
+            return
+        }
+        $cmp = Compare-CmdPeekCommand -Left $left -Right $right -History $history -Catalog $catalog -CommandTester $CommandTester
+        if ($Json) {
+            Write-Output ($cmp | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekCompareOutput -Result $cmp)
+        }
+        return
+    }
+
+    if ($Suggest) {
+        $sug = Get-CmdPeekArgvSuggestion -Argv $Suggest -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+        if ($Json) {
+            Write-Output ($sug | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekSuggestOutput -Result $sug)
         }
         return
     }
@@ -272,7 +416,8 @@ function Invoke-CmdPeek {
     }
 
     if ($AgentExport) {
-        $markdown = Format-CmdPeekAgentExport -History $history -Catalog $catalog -Favorite @($state.Favorites)
+        $markdown = Format-CmdPeekAgentExport -History $history -Catalog $catalog `
+            -Favorite @($state.Favorites) -IncludeUndocumented:$IncludeUndocumented
         if ($AgentExportPath) {
             $parent = Split-Path -Parent $AgentExportPath
             if ($parent -and -not (Test-Path -LiteralPath $parent)) {
@@ -287,19 +432,20 @@ function Invoke-CmdPeek {
     }
 
     if ($Explain) {
-        $whyRow = Get-CmdPeekWhyCommand -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
+        $card = Get-CmdPeekCommandCard -Command $Explain -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
         $exact = @(Select-CmdPeekExactCommand -History $history -Query $Explain)
         if ($exact.Count -eq 1) {
-            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+            $probed = @(Add-CmdPeekUsageProbe -History @($exact[0]) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit 0)
             if ($probed.Count -gt 0 -and $probed[0].PSObject.Properties['Usages']) {
-                $whyRow.usages = @($probed[0].Usages)
+                $card.usages = @($probed[0].Usages)
+                $card.usageDetails = @(ConvertTo-CmdPeekStructuredUsage -Usage @($probed[0].Usages))
             }
         }
         if ($Json) {
-            Write-Output ($whyRow | ConvertTo-Json -Depth 8)
+            Write-Output ($card | ConvertTo-Json -Depth 8)
         }
         else {
-            Write-Output (Format-CmdPeekWhyOutput -Result $whyRow)
+            Write-Output (Format-CmdPeekWhyOutput -Result $card)
         }
         return
     }
@@ -373,16 +519,7 @@ function Invoke-CmdPeek {
     }
 
     if ($Json -or $Gaps -or $HumanGaps) {
-        if ($Json -and -not $Gaps -and -not $HumanGaps -and -not $Refresh) {
-            $cached = Get-CmdPeekInventoryCache -DataDirectory $DataDirectory
-            if ($cached) {
-                $cached | Add-Member lastPeekAt $state.LastPeekAt -Force
-                $cached | Add-Member lastMcpAt $state.LastMcpAt -Force
-                Write-Output ($cached | ConvertTo-Json -Depth 10)
-                return
-            }
-        }
-        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+        $history = @(Add-CmdPeekUsageProbe -History $history -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit $ProbeLimit)
         $snapArgs = @{
             History        = $history
             Manager        = @(Get-CmdPeekPackageManager -CommandTester $CommandTester -All)
@@ -392,6 +529,10 @@ function Invoke-CmdPeek {
             CommandTester  = $CommandTester
             RecentLines    = $RecentLines
             DataDirectory  = $DataDirectory
+            GapLimit       = $GapLimit
+        }
+        if ($PSBoundParameters.ContainsKey('GapKind') -and $GapKind) {
+            $snapArgs.GapKind = $GapKind
         }
         if ($PSBoundParameters.ContainsKey('HistoryPath')) {
             $snapArgs.HistoryPath = $HistoryPath
@@ -401,23 +542,31 @@ function Invoke-CmdPeek {
         }
         $snapshot = ConvertTo-CmdPeekSnapshot @snapArgs
         if ($Gaps -and -not $HumanGaps) {
-            Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+            Write-Output ([pscustomobject]@{
+                gaps    = @($snapshot.gaps)
+                summary = $snapshot.gapSummary
+            } | ConvertTo-Json -Depth 8)
         }
         elseif ($HumanGaps) {
             if ($Json) {
-                Write-Output ($snapshot.gaps | ConvertTo-Json -Depth 8)
+                Write-Output ([pscustomobject]@{
+                    gaps    = @($snapshot.gaps)
+                    summary = $snapshot.gapSummary
+                } | ConvertTo-Json -Depth 8)
             }
             else {
-                Write-Output (Format-CmdPeekGapOutput -Gap @($snapshot.gaps))
+                Write-Output (Format-CmdPeekGapOutput -Gap @($snapshot.gaps) -Summary $snapshot.gapSummary)
             }
         }
         else {
+            $snapshot | Add-Member lastPeekAt $state.LastPeekAt -Force
+            $snapshot | Add-Member lastMcpAt $state.LastMcpAt -Force
+            if ($fullInventoryJson) {
+                Save-CmdPeekInventoryCache -Snapshot $snapshot -DataDirectory $DataDirectory
+            }
             if ($Count -gt 0) {
                 $snapshot.commands = @($snapshot.commands | Select-Object -First $Count)
             }
-            $snapshot | Add-Member lastPeekAt $state.LastPeekAt -Force
-            $snapshot | Add-Member lastMcpAt $state.LastMcpAt -Force
-            Save-CmdPeekInventoryCache -Snapshot $snapshot -DataDirectory $DataDirectory
             Write-Output ($snapshot | ConvertTo-Json -Depth 10)
         }
         return
@@ -457,7 +606,9 @@ function Invoke-CmdPeek {
 
     if ($useInteractive) {
         $kits = Get-CmdPeekCatalogKits -Path $ExamplesPath -DataDirectory $DataDirectory
-        $gapList = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits)
+        $selectArgs = @{ Gap = @(Get-CmdPeekGap -History $history -Catalog $catalog -Kits $kits); Limit = $GapLimit }
+        if ($PSBoundParameters.ContainsKey('GapKind') -and $GapKind) { $selectArgs.Kind = $GapKind }
+        $gapList = @(Select-CmdPeekGap @selectArgs)
         Invoke-CmdPeekInteractive -History $history -State $state -DataDirectory $DataDirectory -Gap $gapList -Catalog $catalog -HelpRunner $HelpRunner
         return
     }
@@ -483,12 +634,12 @@ function Invoke-CmdPeek {
                 $whyRow = Get-CmdPeekWhyCommand -Command $row.Command -History $history -Catalog $catalog -CommandTester $CommandTester -PreferredManager $preferred
                 $row | Add-Member -NotePropertyName SubstitutesInstalled -NotePropertyValue @($whyRow.substitutesInstalled) -Force
                 $row | Add-Member -NotePropertyName InstallCommands -NotePropertyValue @($whyRow.installCommands) -Force
-                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+                $slice = @(Add-CmdPeekUsageProbe -History @($row) -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit 0)
                 Write-Output (Format-CmdPeekQuickOutput -History $slice -ExampleCount 5 -CheatSheet)
                 return
             }
             if ($exact.Count -gt 1) {
-                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner)
+                $flat = @(Add-CmdPeekUsageProbe -History $exact -Catalog $catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner -OpenAiRunner $OpenAiRunner -Limit 0)
                 Write-Output (Format-CmdPeekQuickOutput -History $flat -ExampleCount 3)
                 return
             }
@@ -593,6 +744,7 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekPackageManagerInstallHint'
     'Get-CmdPeekInstalledPackage'
     'Get-CmdPeekCommandHistory'
+    'Get-CmdPeekUnknownInstallDate'
     'Find-CmdPeekMissingCommand'
     'Search-CmdPeekCommand'
     'Select-CmdPeekExactCommand'
@@ -603,6 +755,7 @@ Export-ModuleMember -Function @(
     'Set-CmdPeekPreferredPackageManager'
     'Export-CmdPeekState'
     'Import-CmdPeekState'
+    'ConvertTo-CmdPeekState'
     'Get-CmdPeekUsageExample'
     'Get-CmdPeekExampleCatalog'
     'Get-CmdPeekCatalogKits'
@@ -611,6 +764,10 @@ Export-ModuleMember -Function @(
     'Format-CmdPeekQuickOutput'
     'Install-CmdPeekTrackedPackage'
     'Get-CmdPeekGap'
+    'Get-CmdPeekGapKind'
+    'Get-CmdPeekGapKindRank'
+    'Get-CmdPeekGapSummary'
+    'Select-CmdPeekGap'
     'Get-CmdPeekInventory'
     'ConvertTo-CmdPeekSnapshot'
     'Add-CmdPeekProfileHint'
@@ -624,11 +781,14 @@ Export-ModuleMember -Function @(
     'Test-CmdPeekCatalog'
     'Get-CmdPeekLastInstall'
     'Get-CmdPeekInstallCommands'
+    'Test-CmdPeekShellBuiltinName'
     'Add-CmdPeekPathCommands'
     'Format-CmdPeekTaskOutput'
     'Format-CmdPeekWhyOutput'
     'Format-CmdPeekHaveOutput'
     'Get-CmdPeekAptPackage'
+    'Get-CmdPeekAptPackageCommand'
+    'Get-CmdPeekAptFileListMap'
     'Get-CmdPeekPacmanPackage'
     'Get-CmdPeekWinGetReleaseInfo'
     'Get-CmdPeekMockAiExample'
@@ -640,4 +800,27 @@ Export-ModuleMember -Function @(
     'Get-CmdPeekDefaultUnixRoot'
     'Format-CmdPeekGapOutput'
     'Format-CmdPeekAgentExport'
+    'Get-CmdPeekCommandCard'
+    'Compare-CmdPeekCommand'
+    'Get-CmdPeekArgvSuggestion'
+    'Get-CmdPeekSystemList'
+    'Test-CmdPeekCatalogIsBuiltin'
+    'Get-CmdPeekCurrentOs'
+    'Save-CmdPeekLearnedCatalogEntry'
+    'Get-CmdPeekVersion'
+    'Get-CmdPeekModuleVersion'
+    'Get-CmdPeekMcpVersion'
+    'Get-CmdPeekDoctorReport'
+    'Format-CmdPeekDoctorReport'
+    'Measure-CmdPeekScanStage'
+    'Get-CmdPeekInventoryCache'
+    'Save-CmdPeekInventoryCache'
+    'Get-CmdPeekInventoryCachePath'
+    'Get-CmdPeekInventoryCacheSeconds'
+    'Test-CmdPeekCatalogFile'
+    'Test-CmdPeekJsonSchema'
+    'Get-CmdPeekCatalogCoverage'
+    'Format-CmdPeekCatalogLint'
+    'Invoke-CmdPeekCatalogLint'
+    'Get-CmdPeekCatalogFileList'
 )

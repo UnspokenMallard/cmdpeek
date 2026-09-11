@@ -11,6 +11,12 @@ import {
   filterGaps,
   filterRusty,
   searchSnapshotCommands,
+  filterSystemCommands,
+  isBuiltinCatalog,
+  sortGaps,
+  cap,
+  summarizeSnapshot,
+  installCommandFor,
   AGENT_PLAYBOOK,
 } from "./helpers.js";
 
@@ -24,9 +30,16 @@ type Snapshot = {
     installDate?: string;
     version?: string;
     category?: string;
+    origin?: string;
+    os?: string[];
+    shell?: string[];
     capabilities?: string[];
     aliases?: string[];
     substitutes?: string[];
+    gotchas?: string[];
+    whenToUse?: string;
+    whenNotToUse?: string;
+    collisions?: Array<{ command?: string; shell?: string; warning?: string } | string>;
     usages?: string[];
     usageDetails?: Array<{ argv: string; comment?: string; unsafe?: boolean }>;
     related?: string[];
@@ -37,12 +50,19 @@ type Snapshot = {
   catalog?: Array<{
     command: string;
     category?: string;
+    origin?: string;
+    os?: string[];
+    shell?: string[];
     capabilities?: string[];
     aliases?: string[];
     related?: string[];
     substitutes?: string[];
+    gotchas?: string[];
+    whenToUse?: string;
+    whenNotToUse?: string;
+    collisions?: Array<{ command?: string; shell?: string; warning?: string } | string>;
     usages?: string[];
-    install?: Record<string, string>;
+    install?: Record<string, unknown>;
   }>;
   favorites?: string[];
   hidden?: string[];
@@ -58,8 +78,18 @@ type Snapshot = {
     onPathManager?: string;
     installCommands?: string[];
   }>;
+  gapSummary?: {
+    total?: number;
+    returned?: number;
+    truncated?: boolean;
+    counts?: Record<string, number>;
+    note?: string;
+  };
   rusty?: Array<{ command: string; kind: string; lastLine?: string; lastUsedAt?: string; packageManager?: string }>;
 };
+
+// Every list tool caps its answer so one call cannot swamp an agent's context.
+const DEFAULT_LIST_LIMIT = 25;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.CMDPEEK_ROOT
@@ -153,9 +183,24 @@ function asText(value: unknown): { content: Array<{ type: "text"; text: string }
 const unsafeNote =
   "Do not run usage lines that contain <placeholders> or usageDetails.unsafe=true; copy them for the user instead.";
 
+// Read rather than hardcode: a third copy of the version is a third thing to forget
+// to bump, and cmdpeek doctor compares the module against package.json.
+function packageVersion(): string {
+  for (const dir of [here, path.join(here, ".."), path.join(here, "..", "..")]) {
+    const candidate = path.join(dir, "package.json");
+    try {
+      const pkg = JSON.parse(fs.readFileSync(candidate, "utf8")) as { name?: string; version?: string };
+      if (pkg.name === "@cmdpeek/mcp" && pkg.version) return pkg.version;
+    } catch {
+      // keep looking
+    }
+  }
+  return "0.0.0";
+}
+
 const server = new McpServer({
   name: "cmdpeek",
-  version: "0.2.0",
+  version: packageVersion(),
 });
 
 server.tool(
@@ -186,8 +231,15 @@ server.tool(
   },
   async ({ query, limit }) => {
     const snap = await loadSnapshot();
-    const hits = searchSnapshotCommands(snap.commands ?? [], query, limit ?? 20);
-    return asText({ query, commands: hits });
+    const all = searchSnapshotCommands(snap.commands ?? [], query, Number.MAX_SAFE_INTEGER);
+    const page = cap(all, limit ?? DEFAULT_LIST_LIMIT);
+    return asText({
+      query,
+      commands: page.items,
+      returned: page.returned,
+      matched: page.total,
+      truncated: page.truncated,
+    });
   },
 );
 
@@ -218,6 +270,11 @@ server.tool(
       installed: installed[0] ?? null,
       catalog: catalog ?? null,
       relatedGaps,
+      collisions: catalog?.collisions ?? installed[0]?.collisions ?? [],
+      gotchas: catalog?.gotchas ?? installed[0]?.gotchas ?? [],
+      whenToUse: catalog?.whenToUse ?? installed[0]?.whenToUse ?? null,
+      whenNotToUse: catalog?.whenNotToUse ?? installed[0]?.whenNotToUse ?? null,
+      origin: catalog?.origin ?? installed[0]?.origin ?? null,
       note: unsafeNote,
     });
   },
@@ -225,14 +282,16 @@ server.tool(
 
 server.tool(
   "resolve_task",
-  "Map a task or capability to tools. Always prefer installed matches before suggesting a new package.",
+  "Map a task or capability to tools. Always prefer installed matches, then OS builtins on this machine, before suggesting a new package.",
   {
     task: z.string().describe('Task, capability, or tool name, e.g. "pretty-print json" or "search"'),
-    limit: z.number().int().min(1).max(50).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum matches per group (default 10)"),
   },
-  async ({ task }) => {
+  async ({ task, limit }) => {
     try {
-      const raw = await runCmdPeek(["-Task", task, "-Json"]);
+      const extra = ["-Task", task, "-Json"];
+      if (limit) extra.push("-TaskLimit", String(limit));
+      const raw = await runCmdPeek(extra);
       return asText(JSON.parse(raw));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -298,7 +357,7 @@ server.tool(
 
 server.tool(
   "list_gaps",
-  "Identify tooling gaps: missing related CLIs, thin docs, not-on-path, shadowing (includes PATH winner), incomplete kits with install commands, and category neighbors. Prefer resolve_task before telling the user to install something.",
+  "Identify tooling gaps: missing related CLIs, not-on-path, shadowing (includes PATH winner), incomplete kits with install commands, and category neighbors. Ranked and capped; thin-docs is excluded unless you ask for it by kind. Call with summary=true first to see how many of each kind exist. Prefer resolve_task before telling the user to install something.",
   {
     kind: z
       .enum([
@@ -311,12 +370,41 @@ server.tool(
         "all",
       ])
       .optional()
-      .describe("Gap kind to return (default all)"),
+      .describe("Gap kind to return (default: every kind except thin-docs)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(`Maximum gaps to return (default ${DEFAULT_LIST_LIMIT})`),
+    summary: z
+      .boolean()
+      .optional()
+      .describe("Return only per-kind counts, no gap rows"),
   },
-  async ({ kind }) => {
+  async ({ kind, limit, summary }) => {
     const snap = await loadSnapshot();
-    const gaps = filterGaps(snap.gaps ?? [], kind);
-    return asText({ gaps });
+    if (summary) {
+      return asText({ summary: snap.gapSummary ?? null });
+    }
+    // thin-docs is dropped from the cached snapshot, so ask cmdpeek for it directly.
+    let rows = snap.gaps ?? [];
+    if (kind === "thin-docs" || kind === "all") {
+      const max = limit ?? DEFAULT_LIST_LIMIT;
+      const raw = await runCmdPeek(["-Gaps", "-Json", "-GapKind", kind, "-GapLimit", String(max)]);
+      const parsed = JSON.parse(raw) as { gaps?: Snapshot["gaps"]; summary?: Snapshot["gapSummary"] };
+      return asText({ gaps: parsed.gaps ?? [], summary: parsed.summary ?? null });
+    }
+    rows = sortGaps(filterGaps(rows, kind));
+    const page = cap(rows, limit ?? DEFAULT_LIST_LIMIT);
+    return asText({
+      gaps: page.items,
+      returned: page.returned,
+      matched: page.total,
+      truncated: page.truncated,
+      summary: snap.gapSummary ?? null,
+    });
   },
 );
 
@@ -325,11 +413,17 @@ server.tool(
   "Installed CLIs that do not appear in recent PSReadLine history (never used, or not in the last 500 history lines). Use this to remind the user how to use idle tools. Not a packaging gap.",
   {
     kind: z.enum(["never", "stale", "all"]).optional().describe("Rusty kind to return (default all)"),
+    limit: z.number().int().min(1).max(200).optional().describe(`Maximum rows to return (default ${DEFAULT_LIST_LIMIT})`),
   },
-  async ({ kind }) => {
+  async ({ kind, limit }) => {
     const snap = await loadSnapshot();
-    const rusty = filterRusty(snap.rusty ?? [], kind);
-    return asText({ rusty });
+    const page = cap(filterRusty(snap.rusty ?? [], kind), limit ?? DEFAULT_LIST_LIMIT);
+    return asText({
+      rusty: page.items,
+      returned: page.returned,
+      matched: page.total,
+      truncated: page.truncated,
+    });
   },
 );
 
@@ -401,21 +495,26 @@ server.tool(
   "Return (or optionally execute) a package-manager install command for a catalog tool. Default is dry-run. Set execute=true only with user consent.",
   {
     name: z.string().describe("Command or package name"),
-    manager: z.enum(["scoop", "chocolatey", "winget"]).optional(),
+    manager: z
+      .enum(["scoop", "chocolatey", "winget", "pipx", "npm", "cargo", "brew", "apt", "pacman"])
+      .optional()
+      .describe("Package manager to use. Defaults to the first manager present on this machine."),
     execute: z.boolean().optional().describe("If true, run cmdpeek -Reinstall. Default false (dry-run)."),
   },
   async ({ name, manager, execute }) => {
     const snap = await loadSnapshot();
     const catalog = filterCatalogCommand(snap.catalog ?? [], name);
-    const install = catalog?.install ?? {};
-    const pref = manager ?? "scoop";
+    if (isBuiltinCatalog(catalog)) {
+      return asText({
+        error: `Command '${name}' is an OS builtin (origin=builtin) and cannot be installed from a package manager.`,
+        origin: catalog?.origin ?? "builtin",
+      });
+    }
+    const install = (catalog?.install ?? {}) as Record<string, string>;
+    const present = (snap.managers ?? []).filter((m) => m.present).map((m) => m.name);
+    const pref = manager ?? present[0] ?? "scoop";
     const id = install[pref] ?? install.scoop ?? install.winget ?? install.chocolatey ?? name;
-    const command =
-      pref === "chocolatey"
-        ? `choco install ${id} -y`
-        : pref === "winget"
-          ? `winget install --id ${id} -e --accept-package-agreements --accept-source-agreements`
-          : `scoop install ${id}`;
+    const command = installCommandFor(pref, id);
     if (!execute) {
       return asText({ dryRun: true, command, manager: pref, packageId: id });
     }
@@ -442,6 +541,63 @@ server.tool(
 );
 
 server.tool(
+  "compare_commands",
+  "Compare two commands (origin, OS, gotchas, usages) and say which to prefer on this machine.",
+  {
+    left: z.string().describe("First command, e.g. robocopy"),
+    right: z.string().describe("Second command, e.g. Copy-Item"),
+  },
+  async ({ left, right }) => {
+    try {
+      const raw = await runCmdPeek(["-Compare", `${left} ${right}`, "-Json"]);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "suggest_for_argv",
+  "Map a hallucinated or off-OS command line to an installed equivalent on this machine.",
+  {
+    argv: z.string().describe('Command line, e.g. "ps aux" or "grep -R foo ."'),
+  },
+  async ({ argv }) => {
+    try {
+      const raw = await runCmdPeek(["-Suggest", argv, "-Json"]);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
+  "diagnose",
+  "Health check for this machine's cmdpeek setup: versions, data directory, detected package managers, catalog counts and validation errors, cache ages, and shell history. Call this when a cmdpeek answer looks wrong, empty, or stale.",
+  {
+    timing: z
+      .boolean()
+      .optional()
+      .describe("Also measure per-stage scan timings. Costs a full rescan, so leave this off unless diagnosing slowness."),
+  },
+  async ({ timing }) => {
+    try {
+      const extra = ["-Doctor", "-Json"];
+      if (timing) extra.push("-Timing");
+      const raw = await runCmdPeek(extra);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
   "refresh_inventory",
   "Rescan package managers and PATH, bypass caches. Call this after installing or uninstalling a package, then call list_recent_commands.",
   async () => {
@@ -449,7 +605,7 @@ server.tool(
     return asText({
       generatedAt: snap.generatedAt,
       commandCount: snap.commands?.length ?? 0,
-      gapCount: snap.gaps?.length ?? 0,
+      gapCount: snap.gapSummary?.total ?? snap.gaps?.length ?? 0,
     });
   },
 );
@@ -459,19 +615,43 @@ server.resource("inventory", "cmdpeek://inventory", async () => ({
     {
       uri: "cmdpeek://inventory",
       mimeType: "application/json",
-      text: JSON.stringify(await loadSnapshot(), null, 2),
+      text: JSON.stringify(summarizeSnapshot(await loadSnapshot()), null, 2),
     },
   ],
 }));
 
 server.resource("gaps", "cmdpeek://gaps", async () => {
   const snap = await loadSnapshot();
+  const page = cap(sortGaps(snap.gaps ?? []), DEFAULT_LIST_LIMIT);
   return {
     contents: [
       {
         uri: "cmdpeek://gaps",
         mimeType: "application/json",
-        text: JSON.stringify(snap.gaps ?? [], null, 2),
+        text: JSON.stringify(
+          {
+            gaps: page.items,
+            returned: page.returned,
+            matched: page.total,
+            truncated: page.truncated,
+            summary: snap.gapSummary ?? null,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+  };
+});
+
+server.resource("doctor", "cmdpeek://doctor", async () => {
+  const raw = await runCmdPeek(["-Doctor", "-Json"]);
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://doctor",
+        mimeType: "application/json",
+        text: raw.trim(),
       },
     ],
   };
@@ -516,6 +696,37 @@ server.resource("agent-export", "cmdpeek://agent-export", async () => {
   };
 });
 
+server.resource("system", "cmdpeek://system", async () => {
+  const snap = await loadSnapshot();
+  const commands = filterSystemCommands(snap.commands ?? []);
+  const catalog = (snap.catalog ?? []).filter(
+    (c) => (c.origin ?? "").toLowerCase() === "builtin" || (c.category ?? "").toLowerCase() === "system",
+  );
+  const commandPage = cap(commands, 60);
+  const catalogPage = cap(catalog, 60);
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://system",
+        mimeType: "application/json",
+        text: JSON.stringify(
+          {
+            commands: commandPage.items,
+            commandsTotal: commandPage.total,
+            commandsTruncated: commandPage.truncated,
+            catalog: catalogPage.items,
+            catalogTotal: catalogPage.total,
+            catalogTruncated: catalogPage.truncated,
+            note: "Use get_command for detail on a specific name.",
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+  };
+});
+
 server.registerPrompt(
   "after_install",
   {
@@ -529,6 +740,28 @@ server.registerPrompt(
         content: {
           type: "text",
           text: AGENT_PLAYBOOK,
+        },
+      },
+    ],
+  }),
+);
+
+server.registerPrompt(
+  "prefer_system_then_installed",
+  {
+    title: "Prefer system then installed tools",
+    description: "Try OS builtins, then inventoried CLIs, and only then suggest an install",
+    argsSchema: {
+      task: z.string().describe("What the user wants to do"),
+    },
+  },
+  async ({ task }) => ({
+    messages: [
+      {
+        role: "user",
+        content: {
+          type: "text",
+          text: `The user wants to: ${task}\n\n1. Call resolve_task.\n2. Prefer OS builtins on this machine (cmdpeek://system) when they apply.\n3. Then prefer other installed inventory matches.\n4. Honor collisions/gotchas (PowerShell curl/sc/find/where).\n5. Only suggest a missing catalog package if nothing installed or builtin covers the task.\n${unsafeNote}`,
         },
       },
     ],
@@ -550,7 +783,7 @@ server.registerPrompt(
         role: "user",
         content: {
           type: "text",
-          text: `The user wants to: ${task}\n\nCall cmdpeek resolve_task with that text. If installed matches exist, use those and show usages. Only suggest a missing catalog tool if nothing installed covers the task. ${unsafeNote}`,
+          text: `The user wants to: ${task}\n\nCall cmdpeek resolve_task with that text. Prefer OS builtins and installed matches. Only suggest a missing catalog tool if nothing installed covers the task. ${unsafeNote}`,
         },
       },
     ],

@@ -1,0 +1,2049 @@
+{
+  "$schema": "./usage-examples.schema.json",
+  "commands": {
+    "where": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "search",
+        "path"
+      ],
+      "tasks": [
+        "find executable",
+        "search path"
+      ],
+      "whenToUse": "Locate an executable on PATH from cmd.",
+      "whenNotToUse": "In PowerShell, where is Where-Object. Call where.exe.",
+      "gotchas": [
+        "PowerShell where is Where-Object. Call where.exe to search PATH."
+      ],
+      "usages": [
+        "where.exe notepad                  # First match on PATH",
+        "where.exe /R C:\\Windows notepad.exe  # Recurse a tree"
+      ],
+      "related": [
+        "which"
+      ],
+      "substitutes": [
+        "which"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "tasklist": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "process"
+      ],
+      "tasks": [
+        "list processes",
+        "show process"
+      ],
+      "whenToUse": "List processes on Windows without installing extra tools.",
+      "whenNotToUse": "Prefer Get-Process in PowerShell for objects; ps on POSIX.",
+      "gotchas": [
+        "Not the POSIX ps command."
+      ],
+      "usages": [
+        "tasklist                           # List processes",
+        "tasklist /FI \"IMAGENAME eq pwsh.exe\"  # Filter by image name",
+        "tasklist /SVC                      # Show services in each process"
+      ],
+      "related": [
+        "taskkill",
+        "Get-Process"
+      ],
+      "substitutes": [
+        "ps",
+        "Get-Process"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "taskkill": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "process"
+      ],
+      "tasks": [
+        "kill process",
+        "stop process"
+      ],
+      "whenToUse": "Stop a Windows process by PID or image name.",
+      "whenNotToUse": "Use Stop-Process in PowerShell; kill on POSIX.",
+      "gotchas": [
+        "taskkill /F is forceful. Confirm the PID."
+      ],
+      "usages": [
+        "taskkill /PID <pid>                # Stop a process",
+        "taskkill /IM notepad.exe /F        # Force-stop by image name"
+      ],
+      "related": [
+        "tasklist"
+      ],
+      "substitutes": [
+        "kill"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "sc": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "service"
+      ],
+      "tasks": [
+        "list services",
+        "service status",
+        "windows service"
+      ],
+      "whenToUse": "Query or control Windows services from cmd.",
+      "whenNotToUse": "In PowerShell, sc is Set-Content. Call sc.exe or Get-Service.",
+      "gotchas": [
+        "In PowerShell, sc is an alias for Set-Content. Call sc.exe."
+      ],
+      "usages": [
+        "sc.exe query                      # List services",
+        "sc.exe query wuauserv             # Query one service"
+      ],
+      "related": [
+        "Get-Service"
+      ],
+      "substitutes": [
+        "Get-Service"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "netsh": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "network config",
+        "firewall",
+        "winsock"
+      ],
+      "whenToUse": "Windows network stack, firewall, and interface configuration.",
+      "whenNotToUse": "For a quick IP view use ipconfig; for sockets use netstat or Get-NetTCPConnection.",
+      "gotchas": [
+        "Many netsh contexts need elevation."
+      ],
+      "usages": [
+        "netsh wlan show profiles          # Saved Wi-Fi profiles",
+        "netsh interface ip show config    # IP configuration"
+      ],
+      "related": [
+        "ipconfig",
+        "netstat"
+      ],
+      "substitutes": [
+        "ip"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "ipconfig": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "ip address",
+        "network config",
+        "dns cache"
+      ],
+      "whenToUse": "Show Windows adapter IPs and flush DNS.",
+      "whenNotToUse": "On POSIX use ip or ifconfig.",
+      "gotchas": [
+        "ipconfig /release drops DHCP until /renew."
+      ],
+      "usages": [
+        "ipconfig /all                     # Adapter details",
+        "ipconfig /flushdns                # Flush DNS cache"
+      ],
+      "related": [
+        "netsh",
+        "ping"
+      ],
+      "substitutes": [
+        "ip"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "ping": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "cmd",
+        "posix"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "ping host",
+        "network check"
+      ],
+      "whenToUse": "ICMP reachability. Windows ping counts 4 by default; POSIX ping runs until stopped.",
+      "whenNotToUse": "A blocked ICMP is not proof the host is down.",
+      "gotchas": [
+        "Windows ping -t is continuous; POSIX ping -c N counts."
+      ],
+      "usages": [
+        "ping example.com                  # ICMP echo",
+        "ping -n 4 example.com             # Windows: four echoes"
+      ],
+      "related": [
+        "tracert",
+        "nslookup"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "tracert": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "traceroute",
+        "network path"
+      ],
+      "whenToUse": "Trace the Windows route to a host.",
+      "whenNotToUse": "On POSIX use traceroute. Firewalls often hide hops.",
+      "gotchas": [
+        "Not named traceroute on Windows."
+      ],
+      "usages": [
+        "tracert example.com               # Trace route"
+      ],
+      "related": [
+        "ping"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "netstat": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "cmd",
+        "posix"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "listening ports",
+        "network connections"
+      ],
+      "whenToUse": "List sockets. On modern Linux, ss is faster.",
+      "whenNotToUse": "Prefer Get-NetTCPConnection in PowerShell for objects.",
+      "gotchas": [
+        "netstat -ano on Windows includes PIDs."
+      ],
+      "usages": [
+        "netstat -ano                      # Windows: connections with PIDs",
+        "netstat -tulpn                    # Linux: listening TCP/UDP"
+      ],
+      "related": [
+        "ss"
+      ],
+      "substitutes": [
+        "ss",
+        "Get-NetTCPConnection"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "nslookup": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "cmd",
+        "posix"
+      ],
+      "capabilities": [
+        "network",
+        "dns"
+      ],
+      "tasks": [
+        "dns lookup",
+        "resolve host"
+      ],
+      "whenToUse": "Quick DNS lookup when dig/host are missing.",
+      "whenNotToUse": "Interactive nslookup is easy to leave hanging; prefer one-shot queries.",
+      "gotchas": [
+        "Output format differs between Windows and BIND nslookup."
+      ],
+      "usages": [
+        "nslookup example.com              # Resolve A records"
+      ],
+      "related": [
+        "ping"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "robocopy": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "files",
+        "copy"
+      ],
+      "tasks": [
+        "copy files",
+        "copy directory",
+        "mirror folder"
+      ],
+      "whenToUse": "Reliable recursive copy and mirror on Windows.",
+      "whenNotToUse": "For cloud remotes use rclone. For a few files Copy-Item is simpler.",
+      "gotchas": [
+        "Exit codes 0-7 are success. /MIR deletes extras in the destination."
+      ],
+      "usages": [
+        "robocopy C:\\src D:\\dst /E        # Copy tree including empty dirs",
+        "robocopy C:\\src D:\\dst /MIR      # Mirror (deletes extras)",
+        "robocopy C:\\src D:\\dst /Z /R:2 /W:2  # Restartable with retries"
+      ],
+      "related": [
+        "xcopy",
+        "rclone"
+      ],
+      "substitutes": [
+        "Copy-Item",
+        "cp",
+        "rclone"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "xcopy": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "files",
+        "copy"
+      ],
+      "tasks": [
+        "copy files",
+        "copy directory"
+      ],
+      "whenToUse": "Simple directory copy from cmd.",
+      "whenNotToUse": "Prefer robocopy for trees, retries, and attributes.",
+      "gotchas": [
+        "xcopy is older and weaker than robocopy."
+      ],
+      "usages": [
+        "xcopy C:\\src C:\\dst /E /I        # Copy tree, assume dest is a directory"
+      ],
+      "related": [
+        "robocopy"
+      ],
+      "substitutes": [
+        "robocopy",
+        "Copy-Item"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "whoami": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "cmd",
+        "posix"
+      ],
+      "capabilities": [
+        "identity"
+      ],
+      "tasks": [
+        "current user",
+        "who am i"
+      ],
+      "whenToUse": "Print the current user. On Windows, /groups shows token groups.",
+      "whenNotToUse": "Not a substitute for Get-Acl or icacls.",
+      "gotchas": [
+        "Windows whoami /all is verbose and includes privileges."
+      ],
+      "usages": [
+        "whoami                            # Current user",
+        "whoami /groups                    # Windows: group membership"
+      ],
+      "related": [
+        "hostname"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "icacls": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "permissions",
+        "files"
+      ],
+      "tasks": [
+        "file acl",
+        "permissions",
+        "take ownership"
+      ],
+      "whenToUse": "View or edit NTFS ACLs.",
+      "whenNotToUse": "On POSIX use chmod/chown. In PowerShell Get-Acl/Set-Acl work on objects.",
+      "gotchas": [
+        "Granting (F) is full control. Inheritance flags are easy to get wrong."
+      ],
+      "usages": [
+        "icacls C:\\folder                  # Show ACLs",
+        "icacls file.txt /grant Users:R    # Grant read"
+      ],
+      "related": [
+        "Get-Acl"
+      ],
+      "substitutes": [
+        "chmod",
+        "Get-Acl"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "reg": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "registry"
+      ],
+      "tasks": [
+        "registry query",
+        "registry edit"
+      ],
+      "whenToUse": "Query or change the Windows registry from the shell.",
+      "whenNotToUse": "reg delete is destructive. Prefer GUI or a reviewed .reg for bulk edits.",
+      "gotchas": [
+        "Hive abbreviations: HKLM, HKCU. 32-bit vs 64-bit views differ."
+      ],
+      "usages": [
+        "reg query HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion  # Query a key",
+        "reg add HKCU\\Software\\MyApp /v Name /t REG_SZ /d value /f  # Set a value"
+      ],
+      "related": [
+        "powershell"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "schtasks": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "scheduler"
+      ],
+      "tasks": [
+        "scheduled task",
+        "cron windows"
+      ],
+      "whenToUse": "List or run Windows scheduled tasks.",
+      "whenNotToUse": "On POSIX use crontab or systemctl timers.",
+      "gotchas": [
+        "schtasks /Create has many required switches; review before adding tasks."
+      ],
+      "usages": [
+        "schtasks /Query /FO LIST /V       # Verbose task list",
+        "schtasks /Run /TN \"\\TaskName\"    # Run a task now"
+      ],
+      "related": [
+        "powershell"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "shutdown": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "cmd",
+        "posix"
+      ],
+      "capabilities": [
+        "power"
+      ],
+      "tasks": [
+        "reboot",
+        "shutdown"
+      ],
+      "whenToUse": "Reboot or power off the machine.",
+      "whenNotToUse": "Confirm the host. shutdown /s on Windows is power off.",
+      "gotchas": [
+        "Windows shutdown /a aborts a pending shutdown. Linux flags differ."
+      ],
+      "usages": [
+        "shutdown /r /t 0                  # Windows: reboot now",
+        "shutdown /a                       # Windows: abort pending shutdown"
+      ],
+      "related": [
+        "systemctl"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "systeminfo": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "system"
+      ],
+      "tasks": [
+        "system info",
+        "os version",
+        "hardware info"
+      ],
+      "whenToUse": "Dump Windows OS, hotfix, and hardware summary.",
+      "whenNotToUse": "On POSIX use uname -a and /etc/os-release.",
+      "gotchas": [
+        "Output is localized and slow on some SKUs."
+      ],
+      "usages": [
+        "systeminfo                        # OS and hardware summary"
+      ],
+      "related": [
+        "hostname"
+      ],
+      "substitutes": [
+        "uname"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "hostname": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "cmd",
+        "posix"
+      ],
+      "capabilities": [
+        "system"
+      ],
+      "tasks": [
+        "computer name",
+        "hostname"
+      ],
+      "whenToUse": "Print the machine name.",
+      "whenNotToUse": "Does not show FQDN everywhere; uname -n is the POSIX sibling.",
+      "gotchas": [
+        "Windows hostname.exe takes no arguments; it cannot set the name. Use Rename-Computer."
+      ],
+      "usages": [
+        "hostname                          # Computer name"
+      ],
+      "related": [
+        "uname",
+        "whoami"
+      ],
+      "substitutes": [
+        "uname"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "certutil": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "crypto",
+        "hash"
+      ],
+      "tasks": [
+        "file hash",
+        "certificate"
+      ],
+      "whenToUse": "Hash a file or inspect certificates on Windows.",
+      "whenNotToUse": "Get-FileHash is cleaner in PowerShell.",
+      "gotchas": [
+        "certutil -hashfile is the hash helper, not a generic CA tool."
+      ],
+      "usages": [
+        "certutil -hashfile file.zip SHA256  # SHA256 of a file"
+      ],
+      "related": [
+        "powershell"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "powershell": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "shell"
+      ],
+      "tasks": [
+        "windows powershell",
+        "run powershell"
+      ],
+      "whenToUse": "Windows PowerShell 5.1 (powershell.exe).",
+      "whenNotToUse": "Prefer pwsh for PowerShell 7+ and cross-platform scripts.",
+      "gotchas": [
+        "powershell.exe is Windows PowerShell, not pwsh."
+      ],
+      "usages": [
+        "powershell -NoProfile -Command Get-Date  # Run one command",
+        "powershell -NoProfile -File script.ps1  # Run a script"
+      ],
+      "related": [
+        "pwsh",
+        "cmd"
+      ],
+      "substitutes": [
+        "pwsh"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "cmd": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "shell"
+      ],
+      "tasks": [
+        "command prompt",
+        "batch file"
+      ],
+      "whenToUse": "cmd.exe builtins, .bat/.cmd scripts, and tools that expect cmd parsing.",
+      "whenNotToUse": "Prefer PowerShell for objects and UTF-8 scripts.",
+      "gotchas": [
+        "cmd quoting is not PowerShell quoting."
+      ],
+      "usages": [
+        "cmd /c dir                        # Run one cmd command",
+        "cmd /c script.bat                 # Run a batch file"
+      ],
+      "related": [
+        "powershell"
+      ],
+      "substitutes": [
+        "powershell"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "clip": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "clipboard"
+      ],
+      "tasks": [
+        "copy to clipboard"
+      ],
+      "whenToUse": "Pipe text onto the Windows clipboard.",
+      "whenNotToUse": "Not pbcopy/xclip. In PowerShell Set-Clipboard is richer.",
+      "gotchas": [
+        "clip.exe overwrites the clipboard with stdin."
+      ],
+      "usages": [
+        "echo hello | clip                 # Copy text to clipboard"
+      ],
+      "related": [
+        "cmd"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "timeout": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
+      "capabilities": [
+        "time"
+      ],
+      "tasks": [
+        "sleep",
+        "delay"
+      ],
+      "whenToUse": "Pause a cmd script. /nobreak ignores keypress.",
+      "whenNotToUse": "In PowerShell use Start-Sleep. POSIX sleep is a different binary.",
+      "gotchas": [
+        "PowerShell timeout is not this command."
+      ],
+      "usages": [
+        "timeout /t 5 /nobreak             # Sleep 5 seconds"
+      ],
+      "related": [
+        "cmd"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "ps": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "process"
+      ],
+      "tasks": [
+        "list processes",
+        "show process"
+      ],
+      "whenToUse": "List POSIX processes.",
+      "whenNotToUse": "On Windows use tasklist or Get-Process. PowerShell has no POSIX ps.",
+      "gotchas": [
+        "ps aux is BSD/Linux syntax; Windows tasklist is the sibling."
+      ],
+      "usages": [
+        "ps aux                            # All processes",
+        "ps -p <pid> -o pid,cmd            # One PID"
+      ],
+      "related": [
+        "kill",
+        "pgrep"
+      ],
+      "substitutes": [
+        "tasklist",
+        "Get-Process"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "kill": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "process"
+      ],
+      "tasks": [
+        "kill process",
+        "signal process"
+      ],
+      "whenToUse": "Signal a POSIX PID. Default is TERM.",
+      "whenNotToUse": "PowerShell kill is Stop-Process. On Windows use taskkill.",
+      "gotchas": [
+        "kill -9 is last resort."
+      ],
+      "usages": [
+        "kill <pid>                        # SIGTERM",
+        "kill -9 <pid>                     # SIGKILL"
+      ],
+      "related": [
+        "ps"
+      ],
+      "substitutes": [
+        "taskkill"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "pgrep": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "process"
+      ],
+      "tasks": [
+        "find process",
+        "process id"
+      ],
+      "whenToUse": "Find PIDs by name on POSIX.",
+      "whenNotToUse": "On Windows use tasklist /FI.",
+      "gotchas": [
+        "Matches against the process name only by default, so a python script shows up as python. Use -f to match the full command line."
+      ],
+      "usages": [
+        "pgrep -a ssh                      # PIDs and args matching ssh"
+      ],
+      "related": [
+        "ps",
+        "kill"
+      ],
+      "substitutes": [
+        "tasklist"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "ss": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "listening ports",
+        "network connections"
+      ],
+      "whenToUse": "Modern Linux socket list (replaces netstat).",
+      "whenNotToUse": "On Windows use netstat -ano or Get-NetTCPConnection.",
+      "gotchas": [
+        "ss is not in Windows."
+      ],
+      "usages": [
+        "ss -tulpn                         # Listening TCP/UDP with processes"
+      ],
+      "related": [
+        "netstat"
+      ],
+      "substitutes": [
+        "netstat",
+        "Get-NetTCPConnection"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "ip": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "ip address",
+        "network config",
+        "routing"
+      ],
+      "whenToUse": "Linux iproute2: addresses, links, routes.",
+      "whenNotToUse": "On Windows use ipconfig/netsh. macOS often still uses ifconfig.",
+      "gotchas": [
+        "ip the binary vs PowerShell aliases."
+      ],
+      "usages": [
+        "ip addr                           # Addresses",
+        "ip route                          # Routes"
+      ],
+      "related": [
+        "ss"
+      ],
+      "substitutes": [
+        "ipconfig"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "df": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "disk"
+      ],
+      "tasks": [
+        "disk space",
+        "free space"
+      ],
+      "whenToUse": "Filesystem capacity on POSIX.",
+      "whenNotToUse": "On Windows use Get-PSDrive or wmic logicaldisk.",
+      "gotchas": [
+        "Sizes are in 1K blocks unless you pass -h. Network mounts can hang the whole listing."
+      ],
+      "usages": [
+        "df -h                             # Human-readable disk use"
+      ],
+      "related": [
+        "du"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "du": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "disk",
+        "files"
+      ],
+      "tasks": [
+        "directory size",
+        "disk usage"
+      ],
+      "whenToUse": "Measure a POSIX tree. dust is nicer when installed.",
+      "whenNotToUse": "On Windows use robocopy /L or Get-ChildItem measure.",
+      "gotchas": [
+        "Reports disk usage, not apparent size, so sparse files and compressed filesystems read low. Use --apparent-size for file bytes."
+      ],
+      "usages": [
+        "du -sh *                          # Size of each entry"
+      ],
+      "related": [
+        "df",
+        "dust"
+      ],
+      "substitutes": [
+        "dust"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "chmod": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "permissions",
+        "files"
+      ],
+      "tasks": [
+        "file mode",
+        "permissions"
+      ],
+      "whenToUse": "POSIX file modes.",
+      "whenNotToUse": "NTFS uses ACLs; use icacls or Get-Acl on Windows.",
+      "gotchas": [
+        "chmod 777 is almost never the right fix."
+      ],
+      "usages": [
+        "chmod 644 file.txt                # rw-r--r--",
+        "chmod +x script.sh                # Make executable"
+      ],
+      "related": [
+        "chown"
+      ],
+      "substitutes": [
+        "icacls",
+        "Get-Acl"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "chown": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "permissions",
+        "files"
+      ],
+      "tasks": [
+        "file owner"
+      ],
+      "whenToUse": "Change POSIX owner/group.",
+      "whenNotToUse": "On Windows use icacls /setowner or takeown.",
+      "gotchas": [
+        "Recursive chown on / is disastrous."
+      ],
+      "usages": [
+        "chown user:group file             # Set owner and group"
+      ],
+      "related": [
+        "chmod"
+      ],
+      "substitutes": [
+        "icacls"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "cp": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "files",
+        "copy"
+      ],
+      "tasks": [
+        "copy files",
+        "copy directory"
+      ],
+      "whenToUse": "POSIX copy. Use -a to keep attributes, -r for trees.",
+      "whenNotToUse": "On Windows use robocopy or Copy-Item.",
+      "gotchas": [
+        "cp -r does not preserve everything; cp -a does."
+      ],
+      "usages": [
+        "cp -a src dst                     # Archive copy",
+        "cp -r dir dest/                   # Recursive copy"
+      ],
+      "related": [
+        "mv"
+      ],
+      "substitutes": [
+        "Copy-Item",
+        "robocopy"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "mv": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "files"
+      ],
+      "tasks": [
+        "move file",
+        "rename file"
+      ],
+      "whenToUse": "POSIX rename/move.",
+      "whenNotToUse": "PowerShell move is Move-Item.",
+      "gotchas": [
+        "mv overwrites without asking unless -i."
+      ],
+      "usages": [
+        "mv old.txt new.txt                # Rename",
+        "mv file dir/                      # Move into a directory"
+      ],
+      "related": [
+        "cp"
+      ],
+      "substitutes": [
+        "Copy-Item"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "rm": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "files"
+      ],
+      "tasks": [
+        "delete file",
+        "remove directory"
+      ],
+      "whenToUse": "Remove POSIX files. Need -r for directories.",
+      "whenNotToUse": "PowerShell rm is Remove-Item and may recurse with -Recurse.",
+      "gotchas": [
+        "rm -rf is destructive and not undoable."
+      ],
+      "usages": [
+        "rm file.txt                       # Delete a file",
+        "rm -r dir                         # Delete a directory tree"
+      ],
+      "related": [
+        "mv"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "cat": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "files",
+        "view"
+      ],
+      "tasks": [
+        "print file",
+        "concatenate files"
+      ],
+      "whenToUse": "Write files to stdout on POSIX.",
+      "whenNotToUse": "PowerShell cat is Get-Content. Prefer bat for highlighting when installed.",
+      "gotchas": [
+        "cat is not Get-Content; encoding and -Head differ."
+      ],
+      "usages": [
+        "cat file.txt                      # Print a file",
+        "cat a.txt b.txt > out.txt         # Concatenate"
+      ],
+      "related": [
+        "less",
+        "bat"
+      ],
+      "substitutes": [
+        "Get-Content",
+        "bat"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "head": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "files",
+        "view"
+      ],
+      "tasks": [
+        "first lines",
+        "preview file"
+      ],
+      "whenToUse": "First N lines of a POSIX file.",
+      "whenNotToUse": "In PowerShell use Get-Content -TotalCount.",
+      "gotchas": [
+        "Reading the head of a growing file gives you a snapshot, not a follow. Use tail -f for that."
+      ],
+      "usages": [
+        "head -n 20 file.txt               # First 20 lines"
+      ],
+      "related": [
+        "tail",
+        "cat"
+      ],
+      "substitutes": [
+        "Get-Content"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "tail": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "files",
+        "view"
+      ],
+      "tasks": [
+        "last lines",
+        "follow log"
+      ],
+      "whenToUse": "Last lines or follow a POSIX log.",
+      "whenNotToUse": "Get-Content -Tail / -Wait in PowerShell.",
+      "gotchas": [
+        "tail -f stops following a file that gets rotated. Use tail -F to reopen it by name."
+      ],
+      "usages": [
+        "tail -n 50 file.txt               # Last 50 lines",
+        "tail -f logfile                   # Follow a log"
+      ],
+      "related": [
+        "head",
+        "less"
+      ],
+      "substitutes": [
+        "Get-Content"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "which": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "search",
+        "path"
+      ],
+      "tasks": [
+        "find executable",
+        "search path"
+      ],
+      "whenToUse": "Locate a POSIX executable. command -v is more portable in shells.",
+      "whenNotToUse": "On Windows use where.exe. PowerShell which is not standard.",
+      "gotchas": [
+        "which may not see shell functions or aliases."
+      ],
+      "usages": [
+        "which python3                     # Path of python3"
+      ],
+      "related": [
+        "where"
+      ],
+      "substitutes": [
+        "where"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "uname": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "system"
+      ],
+      "tasks": [
+        "os version",
+        "kernel info",
+        "hostname"
+      ],
+      "whenToUse": "Kernel and machine identity on POSIX.",
+      "whenNotToUse": "On Windows use systeminfo or [Environment]::OSVersion.",
+      "gotchas": [
+        "Not present in Windows PowerShell. Use $PSVersionTable and [Environment]::OSVersion.",
+        "uname -m reports the kernel architecture, which on Apple Silicon under Rosetta is not the process architecture."
+      ],
+      "usages": [
+        "uname -a                          # Kernel and arch"
+      ],
+      "related": [
+        "hostname"
+      ],
+      "substitutes": [
+        "systeminfo",
+        "hostname"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "env": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "system"
+      ],
+      "tasks": [
+        "environment variables",
+        "run with env"
+      ],
+      "whenToUse": "Print or run with a modified POSIX environment.",
+      "whenNotToUse": "PowerShell uses $env:NAME. cmd uses set.",
+      "gotchas": [
+        "env with no arguments prints the environment; env VAR=value cmd sets it for one command only.",
+        "In PowerShell the equivalent is $env:VAR, and Windows has no env.exe."
+      ],
+      "usages": [
+        "env                               # Print environment",
+        "env FOO=bar command               # Run with FOO set"
+      ],
+      "related": [
+        "uname"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "systemctl": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "service"
+      ],
+      "tasks": [
+        "linux service",
+        "systemd",
+        "start service"
+      ],
+      "whenToUse": "systemd units: status, start, enable.",
+      "whenNotToUse": "On Windows use sc.exe or Get-Service.",
+      "gotchas": [
+        "Needs a systemd host; not macOS launchd."
+      ],
+      "usages": [
+        "systemctl status ssh              # Unit status",
+        "systemctl list-units --type=service  # Services"
+      ],
+      "related": [
+        "journalctl"
+      ],
+      "substitutes": [
+        "sc",
+        "Get-Service"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "journalctl": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "log"
+      ],
+      "tasks": [
+        "system log",
+        "journal"
+      ],
+      "whenToUse": "Read the systemd journal.",
+      "whenNotToUse": "On Windows use Get-WinEvent / Event Viewer.",
+      "gotchas": [
+        "Reads only systemd journals, so it is empty on a container or a distro without systemd.",
+        "Needs membership of systemd-journal, or sudo, to see other users’ logs."
+      ],
+      "usages": [
+        "journalctl -u ssh -e              # SSH unit, jump to end",
+        "journalctl -f                     # Follow"
+      ],
+      "related": [
+        "systemctl"
+      ],
+      "substitutes": [],
+      "install": {
+        "builtin": true
+      }
+    },
+    "awk": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "text"
+      ],
+      "tasks": [
+        "column extract",
+        "text transform"
+      ],
+      "whenToUse": "Field-oriented POSIX text processing.",
+      "whenNotToUse": "For simple search use grep/rg; for JSON use jq.",
+      "gotchas": [
+        "mawk vs gawk differ. Not a Windows builtin."
+      ],
+      "usages": [
+        "awk '{print $1}' file             # First column",
+        "awk -F, '{print $2}' file.csv     # CSV second field"
+      ],
+      "related": [
+        "sed",
+        "rg"
+      ],
+      "substitutes": [
+        "sed"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "sed": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "capabilities": [
+        "text"
+      ],
+      "tasks": [
+        "replace text",
+        "stream edit"
+      ],
+      "whenToUse": "Stream replace on POSIX. sd is simpler when installed.",
+      "whenNotToUse": "PowerShell -replace works on strings. BSD vs GNU sed -i differs.",
+      "gotchas": [
+        "sed -i backup-suffix is required on macOS."
+      ],
+      "usages": [
+        "sed 's/foo/bar/' file             # Replace first foo",
+        "sed -n '1,20p' file               # Print lines 1-20"
+      ],
+      "related": [
+        "awk",
+        "sd"
+      ],
+      "substitutes": [
+        "sd"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Get-Process": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "process"
+      ],
+      "tasks": [
+        "list processes",
+        "show process"
+      ],
+      "aliases": [
+        "gps"
+      ],
+      "whenToUse": "Process objects in PowerShell (cross-platform in pwsh).",
+      "whenNotToUse": "tasklist/ps when you want their classic text output.",
+      "gotchas": [
+        "gps is Get-Process, not git push."
+      ],
+      "usages": [
+        "Get-Process                       # Process objects",
+        "Get-Process -Name pwsh            # Filter by name"
+      ],
+      "related": [
+        "Get-Service"
+      ],
+      "substitutes": [
+        "tasklist",
+        "ps"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Get-Service": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "service"
+      ],
+      "tasks": [
+        "list services",
+        "service status"
+      ],
+      "whenToUse": "Windows service objects in PowerShell.",
+      "whenNotToUse": "sc.exe for cmd scripts; systemctl on Linux.",
+      "gotchas": [
+        "Not available in the same form on Linux pwsh."
+      ],
+      "usages": [
+        "Get-Service                       # All services",
+        "Get-Service wuauserv              # One service"
+      ],
+      "related": [
+        "Get-Process"
+      ],
+      "substitutes": [
+        "sc",
+        "systemctl"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Get-NetTCPConnection": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "network"
+      ],
+      "tasks": [
+        "listening ports",
+        "network connections"
+      ],
+      "whenToUse": "TCP connection objects on Windows.",
+      "whenNotToUse": "netstat/ss for a quick text dump.",
+      "gotchas": [
+        "Requires the NetTCPIP module."
+      ],
+      "usages": [
+        "Get-NetTCPConnection -State Listen  # Listening sockets"
+      ],
+      "related": [
+        "Get-Process"
+      ],
+      "substitutes": [
+        "netstat",
+        "ss"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Get-ChildItem": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "files",
+        "list"
+      ],
+      "tasks": [
+        "list files",
+        "find files"
+      ],
+      "aliases": [
+        "gci",
+        "dir",
+        "ls"
+      ],
+      "whenToUse": "List files as objects in any PowerShell.",
+      "whenNotToUse": "POSIX ls flags are not Get-ChildItem parameters. Use -Recurse not -R.",
+      "gotchas": [
+        "ls and dir are aliases for Get-ChildItem in PowerShell."
+      ],
+      "usages": [
+        "Get-ChildItem -Recurse -Filter *.ps1  # Find PowerShell files",
+        "Get-ChildItem -Force                 # Include hidden"
+      ],
+      "related": [
+        "Copy-Item"
+      ],
+      "substitutes": [
+        "ls",
+        "eza"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Copy-Item": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "files",
+        "copy"
+      ],
+      "tasks": [
+        "copy files",
+        "copy directory"
+      ],
+      "aliases": [
+        "copy",
+        "cpi"
+      ],
+      "whenToUse": "Copy files in PowerShell. Use -Recurse for trees.",
+      "whenNotToUse": "robocopy is better for huge Windows trees and mirroring.",
+      "gotchas": [
+        "copy is Copy-Item, not cmd copy."
+      ],
+      "usages": [
+        "Copy-Item src.txt dst.txt         # Copy a file",
+        "Copy-Item -Recurse src dst        # Copy a tree"
+      ],
+      "related": [
+        "Get-ChildItem"
+      ],
+      "substitutes": [
+        "robocopy",
+        "cp"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Select-String": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "search",
+        "grep"
+      ],
+      "tasks": [
+        "search files",
+        "find in files",
+        "grep"
+      ],
+      "aliases": [
+        "sls"
+      ],
+      "whenToUse": "Grep-like search over files or pipeline input in PowerShell.",
+      "whenNotToUse": "rg is faster for large trees. findstr.exe is the cmd sibling.",
+      "gotchas": [
+        "Select-String returns MatchInfo objects, not raw lines, unless you use -Raw (PS7)."
+      ],
+      "usages": [
+        "Select-String -Path *.ps1 -Pattern TODO  # Search scripts",
+        "Get-ChildItem -Recurse | Select-String fail  # Pipeline search"
+      ],
+      "related": [
+        "Get-ChildItem"
+      ],
+      "substitutes": [
+        "findstr",
+        "grep",
+        "rg"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Get-Content": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "files",
+        "view"
+      ],
+      "tasks": [
+        "print file",
+        "read file",
+        "follow log"
+      ],
+      "aliases": [
+        "gc",
+        "cat",
+        "type"
+      ],
+      "whenToUse": "Read a file in PowerShell. -Tail/-Wait follow logs.",
+      "whenNotToUse": "POSIX cat/head/tail when you want those exact tools.",
+      "gotchas": [
+        "cat and type are Get-Content in PowerShell."
+      ],
+      "usages": [
+        "Get-Content file.txt              # Read a file",
+        "Get-Content log.txt -Tail 50 -Wait  # Follow a log"
+      ],
+      "related": [
+        "Select-String"
+      ],
+      "substitutes": [
+        "cat",
+        "bat"
+      ],
+      "install": {
+        "builtin": true
+      }
+    },
+    "Get-Acl": {
+      "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "powershell"
+      ],
+      "capabilities": [
+        "permissions",
+        "files"
+      ],
+      "tasks": [
+        "file acl",
+        "permissions"
+      ],
+      "whenToUse": "Read NTFS/registry ACL objects in PowerShell.",
+      "whenNotToUse": "chmod on POSIX. icacls for a cmd-friendly dump.",
+      "gotchas": [
+        "Set-Acl replaces the ACL; it is easy to lock yourself out."
+      ],
+      "usages": [
+        "Get-Acl C:\\folder | Format-List  # Show ACL"
+      ],
+      "related": [
+        "icacls"
+      ],
+      "substitutes": [
+        "icacls",
+        "chmod"
+      ],
+      "install": {
+        "builtin": true
+      }
+    }
+  },
+  "kits": {
+    "windows-system": [
+      "where",
+      "tasklist",
+      "taskkill",
+      "ipconfig",
+      "netstat",
+      "robocopy",
+      "findstr",
+      "whoami",
+      "cmd",
+      "powershell"
+    ],
+    "posix-system": [
+      "ps",
+      "kill",
+      "df",
+      "du",
+      "chmod",
+      "cp",
+      "ls",
+      "cat",
+      "grep",
+      "find"
+    ],
+    "windows-admin": [
+      "sc",
+      "schtasks",
+      "reg",
+      "icacls",
+      "shutdown",
+      "systeminfo"
+    ],
+    "windows-net": [
+      "netsh",
+      "ipconfig",
+      "ping",
+      "tracert",
+      "netstat",
+      "nslookup"
+    ],
+    "posix-admin": [
+      "systemctl",
+      "journalctl",
+      "chmod",
+      "chown",
+      "df"
+    ],
+    "files": [
+      "ls",
+      "Get-ChildItem",
+      "find",
+      "robocopy",
+      "Copy-Item",
+      "cp"
+    ],
+    "processes": [
+      "tasklist",
+      "Get-Process",
+      "ps",
+      "taskkill",
+      "kill"
+    ]
+  }
+}

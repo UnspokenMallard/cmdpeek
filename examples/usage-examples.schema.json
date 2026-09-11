@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/UnspokenMallard/cmdpeek/examples/usage-examples.schema.json",
+  "title": "cmdpeek catalog",
+  "type": "object",
+  "required": ["commands"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "commands": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/command" }
+    },
+    "kits": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "definitions": {
+    "command": {
+      "type": "object",
+      "required": ["usages"],
+      "additionalProperties": false,
+      "properties": {
+        "category": { "type": "string" },
+        "origin": { "type": "string", "enum": ["builtin", "package", "path"] },
+        "os": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["windows", "linux", "macos"] }
+        },
+        "shell": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["cmd", "powershell", "posix"] }
+        },
+        "usages": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "related": { "type": "array", "items": { "type": "string" } },
+        "capabilities": { "type": "array", "items": { "type": "string" } },
+        "tasks": { "type": "array", "items": { "type": "string" } },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "substitutes": { "type": "array", "items": { "type": "string" } },
+        "gotchas": { "type": "array", "items": { "type": "string" } },
+        "whenToUse": { "type": "string" },
+        "whenNotToUse": { "type": "string" },
+        "install": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [{ "type": "string" }, { "type": "boolean" }]
+          }
+        }
+      }
+    }
+  }
+}

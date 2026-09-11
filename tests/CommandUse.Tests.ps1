@@ -92,3 +92,34 @@ Describe 'Get-CmdPeekRusty' {
         $rusty.Command | Should -Not -Contain 'rg'
     }
 }
+
+Describe 'Get-CmdPeekPsReadLineHistoryPath' {
+    It 'does not throw when APPDATA is unset' {
+        $saved = $env:APPDATA
+        try {
+            Remove-Item Env:\APPDATA -ErrorAction SilentlyContinue
+            { Get-CmdPeekPsReadLineHistoryPath } | Should -Not -Throw
+        }
+        finally {
+            if ($saved) { $env:APPDATA = $saved }
+        }
+    }
+
+    It 'finds the XDG history file used by PowerShell 7 on Linux and macOS' {
+        $xdg = Join-Path $TestDrive 'xdg'
+        $dir = Join-Path $xdg 'powershell/PSReadLine'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $file = Join-Path $dir 'ConsoleHost_history.txt'
+        'jq .' | Set-Content -LiteralPath $file -Encoding UTF8
+
+        $savedXdg = $env:XDG_DATA_HOME
+        try {
+            $env:XDG_DATA_HOME = $xdg
+            @(Get-CmdPeekPsReadLineHistoryPath) | Should -Contain $file
+        }
+        finally {
+            if ($savedXdg) { $env:XDG_DATA_HOME = $savedXdg }
+            else { Remove-Item Env:\XDG_DATA_HOME -ErrorAction SilentlyContinue }
+        }
+    }
+}

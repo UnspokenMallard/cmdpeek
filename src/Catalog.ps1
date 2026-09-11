@@ -203,11 +203,231 @@ function Get-CmdPeekCatalogInstallMap {
     }
     $inst = $Entry.install
     foreach ($prop in $inst.PSObject.Properties) {
+        $key = $prop.Name.ToLowerInvariant()
+        if ($key -eq 'builtin') { continue }
         if ($prop.Value -is [string] -and $prop.Value) {
-            $map[$prop.Name.ToLowerInvariant()] = [string]$prop.Value
+            $map[$key] = [string]$prop.Value
         }
     }
     return $map
+}
+
+function Get-CmdPeekCurrentOs {
+    [CmdletBinding()]
+    param()
+
+    if ($env:OS -eq 'Windows_NT') { return 'windows' }
+    try {
+        if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            return 'windows'
+        }
+    }
+    catch { }
+    if (Test-Path -LiteralPath '/System/Library/CoreServices/SystemVersion.plist') {
+        return 'macos'
+    }
+    return 'linux'
+}
+
+$script:CmdPeekShellBuiltinMemo = @{}
+
+function Test-CmdPeekShellBuiltinName {
+    [CmdletBinding()]
+    param(
+        [string]$Command
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
+    $key = $Command.ToLowerInvariant()
+    if ($script:CmdPeekShellBuiltinMemo.ContainsKey($key)) {
+        return [bool]$script:CmdPeekShellBuiltinMemo[$key]
+    }
+
+    $resolved = @()
+    try { $resolved = @(Get-Command -Name $Command -All -ErrorAction SilentlyContinue) } catch { $resolved = @() }
+
+    # An Application is a file on disk, so some package could have put it there and
+    # an install line is fair. Anything that only resolves as an alias, function, or
+    # cmdlet ships with the shell and cannot be installed by any manager.
+    $answer = $false
+    if ($resolved.Count -gt 0) {
+        $answer = $true
+        foreach ($item in $resolved) {
+            if ($item.CommandType -eq 'Application') { $answer = $false; break }
+        }
+    }
+
+    $script:CmdPeekShellBuiltinMemo[$key] = $answer
+    return $answer
+}
+
+function Get-CmdPeekCatalogOrigin {
+    [CmdletBinding()]
+    param(
+        $Entry,
+        [string]$Command
+    )
+
+    if ($Entry -and $Entry.PSObject.Properties['origin'] -and $Entry.origin) {
+        return ([string]$Entry.origin).ToLowerInvariant()
+    }
+    if (Test-CmdPeekCatalogIsBuiltin -Entry $Entry) { return 'builtin' }
+    # With no catalog entry there is nothing to read an origin from, and guessing
+    # "package" is how cmdpeek ended up calling cd installable. Ask the shell.
+    if (-not $Entry -and (Test-CmdPeekShellBuiltinName -Command $Command)) { return 'builtin' }
+    return 'package'
+}
+
+function Test-CmdPeekCatalogInstallBuiltinFlag {
+    [CmdletBinding()]
+    param($Entry)
+
+    if (-not $Entry -or -not $Entry.PSObject.Properties['install'] -or -not $Entry.install) {
+        return $false
+    }
+    $inst = $Entry.install
+    if (-not $inst.PSObject.Properties['builtin']) { return $false }
+    $flag = $inst.builtin
+    if ($flag -is [bool]) { return [bool]$flag }
+    if ($flag -is [string]) {
+        return $flag.ToLowerInvariant() -in @('true', '1', 'yes')
+    }
+    return $false
+}
+
+function Test-CmdPeekCatalogIsBuiltin {
+    [CmdletBinding()]
+    param($Entry)
+
+    if (-not $Entry) { return $false }
+    if ($Entry.PSObject.Properties['origin'] -and $Entry.origin) {
+        if (([string]$Entry.origin).ToLowerInvariant() -eq 'builtin') { return $true }
+    }
+    return [bool](Test-CmdPeekCatalogInstallBuiltinFlag -Entry $Entry)
+}
+
+function Get-CmdPeekCatalogOsList {
+    [CmdletBinding()]
+    param($Entry)
+    if (-not $Entry -or -not $Entry.PSObject.Properties['os']) { return @() }
+    return @(ConvertTo-CmdPeekStringList -Value $Entry.os)
+}
+
+function Get-CmdPeekCatalogShellList {
+    [CmdletBinding()]
+    param($Entry)
+    if (-not $Entry -or -not $Entry.PSObject.Properties['shell']) { return @() }
+    return @(ConvertTo-CmdPeekStringList -Value $Entry.shell)
+}
+
+function Get-CmdPeekCatalogGotchaList {
+    [CmdletBinding()]
+    param($Entry)
+    if (-not $Entry -or -not $Entry.PSObject.Properties['gotchas']) { return @() }
+    return @(ConvertTo-CmdPeekStringList -Value $Entry.gotchas)
+}
+
+function Get-CmdPeekCatalogWhenToUse {
+    [CmdletBinding()]
+    param($Entry)
+    if (-not $Entry) { return '' }
+    if ($Entry.PSObject.Properties['whenToUse'] -and $Entry.whenToUse) {
+        return [string]$Entry.whenToUse
+    }
+    return ''
+}
+
+function Get-CmdPeekCatalogWhenNotToUse {
+    [CmdletBinding()]
+    param($Entry)
+    if (-not $Entry) { return '' }
+    if ($Entry.PSObject.Properties['whenNotToUse'] -and $Entry.whenNotToUse) {
+        return [string]$Entry.whenNotToUse
+    }
+    return ''
+}
+
+function Test-CmdPeekCatalogAppliesToOs {
+    [CmdletBinding()]
+    param(
+        $Entry,
+        [string]$Os
+    )
+
+    if (-not $Os) { $Os = Get-CmdPeekCurrentOs }
+    $oses = @(Get-CmdPeekCatalogOsList -Entry $Entry)
+    if ($oses.Count -eq 0) { return $true }
+    foreach ($item in $oses) {
+        if ($item.ToLowerInvariant() -eq $Os.ToLowerInvariant()) { return $true }
+    }
+    return $false
+}
+
+function Get-CmdPeekLearnedCatalogPath {
+    [CmdletBinding()]
+    param(
+        [string]$DataDirectory
+    )
+
+    if (-not $DataDirectory) {
+        if (Get-Command Get-CmdPeekDataDirectory -ErrorAction SilentlyContinue) {
+            $DataDirectory = Get-CmdPeekDataDirectory
+        }
+        else {
+            return $null
+        }
+    }
+    return (Join-Path $DataDirectory 'catalog.learned.json')
+}
+
+function Test-CmdPeekLearnedCommandName {
+    [CmdletBinding()]
+    param([string]$Command)
+
+    if ([string]::IsNullOrWhiteSpace($Command)) { return $false }
+    return [bool]($Command -match '^[A-Za-z][A-Za-z0-9._-]{0,79}$')
+}
+
+function Get-CmdPeekNameCollision {
+    [CmdletBinding()]
+    param(
+        [string]$Command
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Command)) { return @() }
+    $key = $Command.ToLowerInvariant()
+    $map = @{
+        'curl'  = 'In Windows PowerShell, curl is an alias for Invoke-WebRequest. Call curl.exe for the real client.'
+        'wget'  = 'In Windows PowerShell, wget is an alias for Invoke-WebRequest. Call wget.exe if you installed GNU Wget.'
+        'sc'    = 'In PowerShell, sc is an alias for Set-Content. Call sc.exe for the Service Control Manager.'
+        'find'  = 'Windows find.exe searches file contents (like findstr). POSIX find searches the tree by name. PowerShell has no Unix find.'
+        'where' = 'PowerShell where is Where-Object. Call where.exe to search PATH.'
+        'sort'  = 'PowerShell sort is Sort-Object, not the POSIX sort filter.'
+        'sleep' = 'PowerShell sleep is Start-Sleep. POSIX sleep is a binary that takes seconds.'
+        'cat'   = 'PowerShell cat is Get-Content. POSIX cat writes files to stdout.'
+        'ls'    = 'PowerShell ls is Get-ChildItem. POSIX ls lists directory entries and does not recurse the same way.'
+        'dir'   = 'cmd dir and PowerShell dir (Get-ChildItem) differ from POSIX ls.'
+        'kill'  = 'PowerShell kill is Stop-Process. POSIX kill signals a PID.'
+        'mkdir' = 'PowerShell mkdir is New-Item -ItemType Directory. POSIX mkdir has -p.'
+        'echo'  = 'PowerShell echo is Write-Output. cmd echo and POSIX echo quote differently.'
+        'copy'  = 'cmd copy is not robocopy. PowerShell copy is Copy-Item.'
+        'move'  = 'PowerShell move is Move-Item. cmd move does not copy across volumes the same way.'
+        'type'  = 'cmd type prints a file. PowerShell type is Get-Content. Neither is the POSIX type builtin.'
+        'set'   = 'cmd set and POSIX set are not Set-Variable. PowerShell set is a default alias for Set-Variable.'
+        'compare' = 'PowerShell compare is Compare-Object, not fc.exe.'
+        'fc'    = 'fc.exe compares files. It is not Format-Custom (fc in PowerShell).'
+        'gcm'   = 'PowerShell gcm is Get-Command, not git commit -m.'
+        'gps'   = 'PowerShell gps is Get-Process, not git push.'
+        'rm'    = 'PowerShell rm is Remove-Item and can recurse. POSIX rm needs -r for directories.'
+    }
+    if (-not $map.ContainsKey($key) -or -not $map[$key]) { return @() }
+    return @(
+        [pscustomobject]@{
+            command = $Command
+            shell   = 'powershell'
+            warning = [string]$map[$key]
+        }
+    )
 }
 
 function Get-CmdPeekCanonicalCommand {
@@ -218,21 +438,11 @@ function Get-CmdPeekCanonicalCommand {
     )
 
     if (-not $Command) { return $Command }
-    $entryHit = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
-    if (-not $entryHit) { return $Command }
-    foreach ($key in @($Catalog.Keys)) {
-        if ($key.ToLowerInvariant() -eq $Command.ToLowerInvariant()) {
-            return [string]$key
-        }
-    }
-    foreach ($key in @($Catalog.Keys)) {
-        $entry = $Catalog[$key]
-        $aliases = @(Get-CmdPeekCatalogAliasList -Entry $entry)
-        foreach ($alias in $aliases) {
-            if ($alias.ToLowerInvariant() -eq $Command.ToLowerInvariant()) {
-                return [string]$key
-            }
-        }
+    if (-not $Catalog) { return $Command }
+    $lookup = Get-CmdPeekCatalogLookup -Catalog $Catalog
+    $needle = $Command.ToLowerInvariant()
+    if ($lookup -and $lookup.Canonical.ContainsKey($needle)) {
+        return [string]$lookup.Canonical[$needle]
     }
     return $Command
 }
@@ -278,6 +488,58 @@ function Get-CmdPeekInstalledNameSet {
     return $set
 }
 
+$script:CmdPeekCoverageCache = New-Object System.Collections.Generic.List[object]
+$script:CmdPeekCoverageCacheMax = 4
+
+function Clear-CmdPeekSubstituteCoverage {
+    [CmdletBinding()]
+    param()
+    $script:CmdPeekCoverageCache = New-Object System.Collections.Generic.List[object]
+}
+
+function Get-CmdPeekSubstituteCoverage {
+    [CmdletBinding()]
+    param(
+        [hashtable]$InstalledSet,
+        [hashtable]$Catalog
+    )
+
+    if (-not $InstalledSet -or -not $Catalog) { return @{} }
+
+    # "Which names does something installed already substitute for?" only depends on
+    # the catalog and the installed set, but it used to be recomputed per lookup.
+    foreach ($slot in $script:CmdPeekCoverageCache) {
+        if ([object]::ReferenceEquals($slot.Catalog, $Catalog) -and
+            [object]::ReferenceEquals($slot.InstalledSet, $InstalledSet) -and
+            $slot.InstalledCount -eq $InstalledSet.Count) {
+            return $slot.Coverage
+        }
+    }
+
+    $coverage = @{}
+    foreach ($key in @($Catalog.Keys)) {
+        if (-not $InstalledSet.ContainsKey(([string]$key).ToLowerInvariant())) { continue }
+        foreach ($sub in @(Get-CmdPeekCatalogSubstituteList -Entry $Catalog[$key])) {
+            if (-not $sub) { continue }
+            $coverage[([string]$sub).ToLowerInvariant()] = $true
+            foreach ($alias in @(Get-CmdPeekCommandNamesFor -Command $sub -Catalog $Catalog)) {
+                if ($alias) { $coverage[([string]$alias).ToLowerInvariant()] = $true }
+            }
+        }
+    }
+
+    $script:CmdPeekCoverageCache.Add([pscustomobject]@{
+        Catalog        = $Catalog
+        InstalledSet   = $InstalledSet
+        InstalledCount = $InstalledSet.Count
+        Coverage       = $coverage
+    })
+    while ($script:CmdPeekCoverageCache.Count -gt $script:CmdPeekCoverageCacheMax) {
+        $script:CmdPeekCoverageCache.RemoveAt(0)
+    }
+    return $coverage
+}
+
 function Test-CmdPeekNameCovered {
     [CmdletBinding()]
     param(
@@ -299,16 +561,8 @@ function Test-CmdPeekNameCovered {
     }
 
     if ($Catalog) {
-        foreach ($key in @($Catalog.Keys)) {
-            if (-not $InstalledSet.ContainsKey($key.ToLowerInvariant())) { continue }
-            $subs = @(Get-CmdPeekCatalogSubstituteList -Entry $Catalog[$key])
-            foreach ($sub in $subs) {
-                if ($sub.ToLowerInvariant() -eq $Name.ToLowerInvariant()) { return $true }
-                foreach ($alias in @(Get-CmdPeekCommandNamesFor -Command $sub -Catalog $Catalog)) {
-                    if ($alias.ToLowerInvariant() -eq $Name.ToLowerInvariant()) { return $true }
-                }
-            }
-        }
+        $coverage = Get-CmdPeekSubstituteCoverage -InstalledSet $InstalledSet -Catalog $Catalog
+        if ($coverage.ContainsKey($Name.ToLowerInvariant())) { return $true }
     }
 
     return $false
@@ -330,6 +584,17 @@ function Get-CmdPeekInstallCommands {
         $pref = $PreferredManager.ToLowerInvariant()
         if ($pref -eq 'choco') { $pref = 'chocolatey' }
         $order = @($pref) + @($order | Where-Object { $_ -ne $pref })
+    }
+
+    if (Test-CmdPeekCatalogIsBuiltin -Entry $entry) {
+        if ($map.Count -eq 0) { return @() }
+    }
+
+    # No install map means every line below is a guess built from the name alone.
+    # That guess is useful for a real package the catalog has not learned yet, and
+    # actively harmful for a shell builtin: "scoop install cd" is not a thing.
+    if ($map.Count -eq 0 -and (Test-CmdPeekShellBuiltinName -Command $Command)) {
+        return @()
     }
 
     $lines = New-Object System.Collections.Generic.List[string]
@@ -382,13 +647,20 @@ function Get-CmdPeekCatalogIndex {
         $rows.Add([pscustomobject]@{
             command      = [string]$key
             category     = $(if ($entry.PSObject.Properties['category'] -and $entry.category) { [string]$entry.category } else { 'other' })
+            origin       = Get-CmdPeekCatalogOrigin -Entry $entry
+            os           = @(Get-CmdPeekCatalogOsList -Entry $entry)
+            shell        = @(Get-CmdPeekCatalogShellList -Entry $entry)
             capabilities = @(Get-CmdPeekCatalogCapabilityList -Entry $entry)
             aliases      = @(Get-CmdPeekCatalogAliasList -Entry $entry)
             related      = @(ConvertTo-CmdPeekStringList -Value $(if ($entry.PSObject.Properties['related']) { $entry.related } else { $null }))
             substitutes  = @(Get-CmdPeekCatalogSubstituteList -Entry $entry)
             tasks        = @(Get-CmdPeekCatalogTaskList -Entry $entry)
+            gotchas      = @(Get-CmdPeekCatalogGotchaList -Entry $entry)
+            whenToUse    = Get-CmdPeekCatalogWhenToUse -Entry $entry
+            whenNotToUse = Get-CmdPeekCatalogWhenNotToUse -Entry $entry
             install      = Get-CmdPeekCatalogInstallMap -Entry $entry
             usages       = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 5)
+            collisions   = @(Get-CmdPeekNameCollision -Command $key)
         })
     }
     return @($rows.ToArray())
@@ -405,11 +677,40 @@ function Test-CmdPeekCatalog {
     if (-not $Catalog) { $Catalog = @{} }
     if (-not $Kits) { $Kits = @{} }
 
+    $validOrigin = @('builtin', 'package', 'path')
+    $validOs = @('windows', 'linux', 'macos')
+    $validShell = @('cmd', 'powershell', 'posix')
+
     foreach ($key in @($Catalog.Keys)) {
         $entry = $Catalog[$key]
         $usages = @(Get-CmdPeekCatalogUsageList -Entry $entry)
         if ($usages.Count -eq 0) {
             $errors.Add("Command '$key' has no usages")
+        }
+        $origin = ''
+        if ($entry -and $entry.PSObject.Properties['origin'] -and $entry.origin) {
+            $origin = ([string]$entry.origin).ToLowerInvariant()
+            if ($validOrigin -notcontains $origin) {
+                $errors.Add("Command '$key' origin '$origin' is invalid")
+            }
+        }
+        $isBuiltin = Test-CmdPeekCatalogIsBuiltin -Entry $entry
+        $installMap = Get-CmdPeekCatalogInstallMap -Entry $entry
+        if ($isBuiltin -and $installMap.Count -gt 0) {
+            $errors.Add("Command '$key' is builtin but has package install ids")
+        }
+        if ($origin -eq 'package' -and $isBuiltin) {
+            $errors.Add("Command '$key' origin is package but install.builtin is set")
+        }
+        foreach ($osName in @(Get-CmdPeekCatalogOsList -Entry $entry)) {
+            if ($validOs -notcontains $osName.ToLowerInvariant()) {
+                $errors.Add("Command '$key' os '$osName' is invalid")
+            }
+        }
+        foreach ($shellName in @(Get-CmdPeekCatalogShellList -Entry $entry)) {
+            if ($validShell -notcontains $shellName.ToLowerInvariant()) {
+                $errors.Add("Command '$key' shell '$shellName' is invalid")
+            }
         }
         foreach ($rel in @(ConvertTo-CmdPeekStringList -Value $(if ($entry.PSObject.Properties['related']) { $entry.related } else { $null }))) {
             $hit = Get-CmdPeekCatalogEntry -Command $rel -Catalog $Catalog
@@ -436,4 +737,227 @@ function Test-CmdPeekCatalog {
     }
 
     return @($errors.ToArray())
+}
+
+function Get-CmdPeekRowPackageManager {
+    [CmdletBinding()]
+    param(
+        $Entry,
+        [string]$Fallback = 'path'
+    )
+
+    if (Test-CmdPeekCatalogIsBuiltin -Entry $Entry) { return 'builtin' }
+    $origin = Get-CmdPeekCatalogOrigin -Entry $Entry
+    if ($origin -eq 'builtin') { return 'builtin' }
+    if ($Fallback) { return $Fallback }
+    return 'path'
+}
+
+function Save-CmdPeekLearnedCatalogEntry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [AllowEmptyCollection()]
+        [string[]]$Usages,
+        [string]$DataDirectory,
+        [hashtable]$Catalog,
+        [string]$Category = 'other',
+        [string]$Origin = 'path'
+    )
+
+    if (-not $DataDirectory) { return $false }
+    if (-not (Test-CmdPeekLearnedCommandName -Command $Command)) { return $false }
+    $keep = New-Object System.Collections.Generic.List[string]
+    foreach ($item in @($Usages)) {
+        if ([string]::IsNullOrWhiteSpace($item)) { continue }
+        if ($item -match '(^|\s)(--help|-h)(\s|$)') { continue }
+        $keep.Add([string]$item)
+    }
+    if ($keep.Count -eq 0) { return $false }
+
+    $shipped = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
+    if ($shipped) {
+        $existing = @(Get-CmdPeekCatalogUsageList -Entry $shipped)
+        if ($existing.Count -gt 0) { return $false }
+    }
+
+    $path = Get-CmdPeekLearnedCatalogPath -DataDirectory $DataDirectory
+    if (-not $path) { return $false }
+
+    $commandObj = New-Object PSObject
+    $count = 0
+    if (Test-Path -LiteralPath $path) {
+        try {
+            $existingJson = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($existingJson -and $existingJson.PSObject.Properties['commands'] -and $existingJson.commands) {
+                foreach ($prop in $existingJson.commands.PSObject.Properties) {
+                    $count++
+                    $commandObj | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force
+                }
+            }
+        }
+        catch { }
+    }
+
+    $already = $false
+    foreach ($prop in $commandObj.PSObject.Properties) {
+        if ($prop.Name.ToLowerInvariant() -eq $Command.ToLowerInvariant()) { $already = $true; break }
+    }
+    if (-not $already -and $count -ge 200) { return $false }
+
+    $payloadEntry = [pscustomobject]@{
+        category = $Category
+        origin   = $Origin
+        usages   = @($keep)
+    }
+    $commandObj | Add-Member -NotePropertyName $Command -NotePropertyValue $payloadEntry -Force
+
+    $dir = Split-Path -Parent $path
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $payload = [pscustomobject]@{
+        schemaVersion = 1
+        commands      = $commandObj
+    }
+    ($payload | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $path -Encoding UTF8
+    return $true
+}
+
+function Get-CmdPeekCommandCard {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+        [hashtable]$Catalog,
+        [AllowEmptyCollection()]
+        [object[]]$History,
+        [scriptblock]$CommandTester,
+        [string]$PreferredManager
+    )
+
+    if (-not $Catalog) { $Catalog = @{} }
+    $canonical = Get-CmdPeekCanonicalCommand -Command $Command -Catalog $Catalog
+    $entry = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
+    $why = $null
+    if (Get-Command Get-CmdPeekWhyCommand -ErrorAction SilentlyContinue) {
+        $why = Get-CmdPeekWhyCommand -Command $Command -History $History -Catalog $Catalog -CommandTester $CommandTester -PreferredManager $PreferredManager
+    }
+
+    $usages = @()
+    if ($why -and $why.PSObject.Properties['usages']) {
+        $usages = @($why.usages)
+    }
+    else {
+        $usages = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 5)
+    }
+
+    $row = $null
+    foreach ($item in @($History)) {
+        if (-not $item -or -not $item.Command) { continue }
+        if ($item.Command.ToLowerInvariant() -eq $canonical.ToLowerInvariant() -or $item.Command.ToLowerInvariant() -eq $Command.ToLowerInvariant()) {
+            $row = $item
+            break
+        }
+    }
+
+    $os = Get-CmdPeekCurrentOs
+    $subs = @(Get-CmdPeekCatalogSubstituteList -Entry $entry)
+    $installedSet = Get-CmdPeekInstalledNameSet -History $History -Catalog $Catalog
+    $subRows = New-Object System.Collections.Generic.List[object]
+    foreach ($sub in $subs) {
+        $subEntry = Get-CmdPeekCatalogEntry -Command $sub -Catalog $Catalog
+        $prefer = Test-CmdPeekCatalogAppliesToOs -Entry $subEntry -Os $os
+        $subRows.Add([pscustomobject]@{
+            command   = $sub
+            installed = [bool](Test-CmdPeekNameCovered -Name $sub -InstalledSet $installedSet -Catalog $Catalog)
+            origin    = Get-CmdPeekCatalogOrigin -Entry $subEntry
+            preferOnOs = [bool]$prefer
+        })
+    }
+
+    $related = @(ConvertTo-CmdPeekStringList -Value $(if ($entry -and $entry.PSObject.Properties['related']) { $entry.related } else { $null }))
+    $dangerous = @(
+        ConvertTo-CmdPeekStructuredUsage -Usage $usages | Where-Object { $_.unsafe } | ForEach-Object { $_.argv }
+    )
+
+    $pm = $null
+    if ($row -and $row.PSObject.Properties['PackageManager']) { $pm = [string]$row.PackageManager }
+    elseif ($why -and $why.PSObject.Properties['onPathManager'] -and $why.onPathManager) { $pm = [string]$why.onPathManager }
+    elseif (Test-CmdPeekCatalogIsBuiltin -Entry $entry) { $pm = 'builtin' }
+
+    return [pscustomobject]@{
+        command         = $(if ($canonical) { $canonical } else { $Command })
+        queried         = $Command
+        origin          = Get-CmdPeekCatalogOrigin -Entry $entry -Command $(if ($canonical) { $canonical } else { $Command })
+        os              = @(Get-CmdPeekCatalogOsList -Entry $entry)
+        shell           = @(Get-CmdPeekCatalogShellList -Entry $entry)
+        category        = $(if ($entry -and $entry.PSObject.Properties['category'] -and $entry.category) { [string]$entry.category } else { 'other' })
+        onPath          = [bool]$(if ($why) { $why.onPath } elseif ($row -and $row.PSObject.Properties['OnPath']) { $row.OnPath } else { $false })
+        installed       = [bool]($null -ne $row)
+        covered         = [bool]$(if ($why) { $why.installed } else { $null -ne $row })
+        packageManager  = $pm
+        whenToUse       = Get-CmdPeekCatalogWhenToUse -Entry $entry
+        whenNotToUse    = Get-CmdPeekCatalogWhenNotToUse -Entry $entry
+        gotchas         = @(Get-CmdPeekCatalogGotchaList -Entry $entry)
+        collisions      = @(Get-CmdPeekNameCollision -Command $(if ($canonical) { $canonical } else { $Command }))
+        aliases         = @(Get-CmdPeekCatalogAliasList -Entry $entry)
+        capabilities    = @(Get-CmdPeekCatalogCapabilityList -Entry $entry)
+        related         = $related
+        substitutes     = @($subRows.ToArray())
+        usages          = $usages
+        usageDetails    = @(ConvertTo-CmdPeekStructuredUsage -Usage $usages)
+        dangerous       = @($dangerous)
+        appliesToOs     = [bool](Test-CmdPeekCatalogAppliesToOs -Entry $entry -Os $os)
+        currentOs       = $os
+        installCommands = $(if ($why) { @($why.installCommands) } else { @(Get-CmdPeekInstallCommands -Command $(if ($canonical) { $canonical } else { $Command }) -Catalog $Catalog -PreferredManager $PreferredManager) })
+    }
+}
+
+function Test-CmdPeekSystemInventoryRow {
+    [CmdletBinding()]
+    param(
+        $Row,
+        $Entry
+    )
+
+    if ($Entry -and (Test-CmdPeekCatalogIsBuiltin -Entry $Entry)) { return $true }
+    if ($Entry -and $Entry.PSObject.Properties['category'] -and $Entry.category) {
+        if (([string]$Entry.category).ToLowerInvariant() -eq 'system') { return $true }
+    }
+    if ($Row -and $Row.PSObject.Properties['PackageManager'] -and $Row.PackageManager) {
+        $pm = ([string]$Row.PackageManager).ToLowerInvariant()
+        if ($pm -in @('builtin', 'windows')) { return $true }
+    }
+    if ($Row -and $Row.PSObject.Properties['Origin'] -and $Row.Origin) {
+        if (([string]$Row.Origin).ToLowerInvariant() -eq 'builtin') { return $true }
+    }
+    if ($Row -and $Row.PSObject.Properties['Category'] -and $Row.Category) {
+        if (([string]$Row.Category).ToLowerInvariant() -eq 'system') { return $true }
+    }
+    return $false
+}
+
+function Get-CmdPeekSystemList {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$History,
+        [hashtable]$Catalog
+    )
+
+    if (-not $Catalog) { $Catalog = @{} }
+    $rows = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
+    foreach ($row in @($History)) {
+        if (-not $row -or -not $row.Command) { continue }
+        $key = $row.Command.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $entry = Get-CmdPeekCatalogEntry -Command $row.Command -Catalog $Catalog
+        if (-not (Test-CmdPeekSystemInventoryRow -Row $row -Entry $entry)) { continue }
+        $seen[$key] = $true
+        $rows.Add($row)
+    }
+    return @($rows.ToArray() | Sort-Object @{ Expression = { $_.Command.ToLowerInvariant() } })
 }

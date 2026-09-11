@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 Set-StrictMode -Version Latest
 
 function New-CmdPeekTuiState {
@@ -152,6 +152,7 @@ function Convert-CmdPeekKey {
         'h' { if ($shift) { return 'HiddenFilter' } else { return 'Hide' } }
         'g' { return 'Gaps' }
         'u' { return 'Have' }
+        's' { return 'System' }
         'c' { if ($shift) { return 'CategoryFilter' } else { return 'Copy' } }
         'r' { return 'Run' }
         'a' { return 'All' }
@@ -217,6 +218,7 @@ function Update-CmdPeekTuiState {
                 'Help' { $State.View = 'help' }
                 'Search' { $State.View = 'search' }
                 'Have' { $State.View = 'have'; $State.Selected = 0; $State.Scroll = 0 }
+                'System' { $State.View = 'system'; $State.Selected = 0; $State.Scroll = 0 }
             }
         }
         'have' {
@@ -231,6 +233,22 @@ function Update-CmdPeekTuiState {
                 'Quit' { $State.Quit = $true }
                 'Help' { $State.View = 'help' }
                 'Gaps' { $State.View = 'gaps'; $State.Selected = 0; $State.Scroll = 0 }
+                'System' { $State.View = 'system'; $State.Selected = 0; $State.Scroll = 0 }
+            }
+        }
+        'system' {
+            switch ($Action) {
+                'Up' { $State.Selected = Move-CmdPeekIndex -Index $State.Selected -Delta -1 -Count $ViewCount }
+                'Down' { $State.Selected = Move-CmdPeekIndex -Index $State.Selected -Delta 1 -Count $ViewCount }
+                'PageUp' { $State.Selected = Move-CmdPeekIndex -Index $State.Selected -Delta (-1 * $PageSize) -Count $ViewCount }
+                'PageDown' { $State.Selected = Move-CmdPeekIndex -Index $State.Selected -Delta $PageSize -Count $ViewCount }
+                'Home' { $State.Selected = 0 }
+                'End' { $State.Selected = Move-CmdPeekIndex -Index 0 -Delta ([Math]::Max(0, $ViewCount - 1)) -Count $ViewCount }
+                'Escape' { $State.View = 'list'; $State.Selected = 0 }
+                'Quit' { $State.Quit = $true }
+                'Help' { $State.View = 'help' }
+                'Gaps' { $State.View = 'gaps'; $State.Selected = 0; $State.Scroll = 0 }
+                'Have' { $State.View = 'have'; $State.Selected = 0; $State.Scroll = 0 }
             }
         }
         'help' {
@@ -276,6 +294,7 @@ function Update-CmdPeekTuiState {
                 'Search' { $State.View = 'search' }
                 'Gaps' { $State.View = 'gaps'; $State.Selected = 0; $State.Scroll = 0 }
                 'Have' { $State.View = 'have'; $State.Selected = 0; $State.Scroll = 0 }
+                'System' { $State.View = 'system'; $State.Selected = 0; $State.Scroll = 0 }
                 'Help' { $State.View = 'help' }
                 'Quit' { $State.Quit = $true }
                 'Escape' {
@@ -427,6 +446,8 @@ function Write-CmdPeekTuiFrame {
         [object[]]$Gap,
         [AllowEmptyCollection()]
         [object[]]$Have,
+        [AllowEmptyCollection()]
+        [object[]]$System,
         [int]$Width,
         [int]$Height
     )
@@ -447,6 +468,7 @@ function Write-CmdPeekTuiFrame {
     $title = 'cmdpeek'
     if ($State.View -eq 'gaps') { $title = 'cmdpeek  gaps' }
     elseif ($State.View -eq 'have') { $title = 'cmdpeek  use what you have' }
+    elseif ($State.View -eq 'system') { $title = 'cmdpeek  system commands' }
     elseif ($State.View -eq 'help') { $title = 'cmdpeek  keys' }
     elseif ($State.View -eq 'detail') { $title = 'cmdpeek  detail' }
     elseif ($State.View -eq 'search') { $title = 'cmdpeek  search' }
@@ -477,6 +499,7 @@ function Write-CmdPeekTuiFrame {
             'h           Hide/unhide this command in cmdpeek -n quick view'
             'g           Gap view: related tools you do not have'
             'u           Use what you have: installed tools by category'
+            's           System commands: builtins and OS tools'
             'c           Copy highlighted usage to the clipboard'
             'r           Run usage if it has no <placeholders>'
             'a           Clear search / category / favorites filter'
@@ -527,6 +550,30 @@ function Write-CmdPeekTuiFrame {
                     $caps = (@($h.Capabilities) -join ',')
                 }
                 $row = " $mark $(Get-CmdPeekPadded $h.Command 14) $(Get-CmdPeekPadded $h.PackageManager 10) $(Get-CmdPeekPadded $h.Category 12) $caps"
+                $row = Get-CmdPeekPadded $row $Width
+                if ($idx -eq $State.Selected) { $lines.Add("$rev$row$reset") }
+                else { $lines.Add($row) }
+                $i++
+            }
+        }
+        while ($lines.Count -lt ($Height - 1)) { $lines.Add('') }
+    }
+    elseif ($State.View -eq 'system') {
+        $sysRows = @($System)
+        if ($sysRows.Count -eq 0) {
+            $lines.Add("$dim  No system / builtin commands in inventory.$reset")
+        }
+        else {
+            $page = $bodyHeight
+            $start = $State.Scroll
+            $slice = @($sysRows | Select-Object -Skip $start -First $page)
+            $i = 0
+            foreach ($h in $slice) {
+                $idx = $start + $i
+                $mark = $(if ($idx -eq $State.Selected) { '>' } else { ' ' })
+                $origin = ''
+                if ($h.PSObject.Properties['Origin'] -and $h.Origin) { $origin = [string]$h.Origin }
+                $row = " $mark $(Get-CmdPeekPadded $h.Command 16) $(Get-CmdPeekPadded $h.PackageManager 10) $(Get-CmdPeekPadded $origin 10) $(Get-CmdPeekPadded $h.Category 12)"
                 $row = Get-CmdPeekPadded $row $Width
                 if ($idx -eq $State.Selected) { $lines.Add("$rev$row$reset") }
                 else { $lines.Add($row) }
@@ -656,7 +703,7 @@ function Write-CmdPeekTuiFrame {
         $lines.Add("$green$footer$reset")
     }
     else {
-        $hint = '↑↓ move  ←→ pane  ↵ open/copy  / search  f fav  g gaps  u have  h hide  ? help  q quit'
+        $hint = '↑↓ move  ←→ pane  ↵ open/copy  / search  f fav  g gaps  u have  s system  h hide  ? help  q quit'
         if ($State.Status) { $hint = $State.Status }
         $lines.Add("$dim" + (Get-CmdPeekPadded $hint $Width) + "$reset")
     }
@@ -709,7 +756,7 @@ function Invoke-CmdPeekTui {
             try { $width = [Console]::WindowWidth; $height = [Console]::WindowHeight } catch { }
             $page = [Math]::Max(5, $height - 3)
 
-            if ($ui.View -ne 'gaps' -and $ui.View -ne 'help' -and $ui.View -ne 'have') {
+            if ($ui.View -ne 'gaps' -and $ui.View -ne 'help' -and $ui.View -ne 'have' -and $ui.View -ne 'system') {
                 $window = @(Get-CmdPeekProbeWindow -View $view -Selected $ui.Selected -Scroll $ui.Scroll -PageSize $page)
                 if ($window.Count -gt 0) {
                     [void](Add-CmdPeekUsageProbe -History $window -Catalog $Catalog -DataDirectory $DataDirectory -HelpRunner $HelpRunner)
@@ -717,6 +764,7 @@ function Invoke-CmdPeekTui {
             }
 
             $haveRows = @(Get-CmdPeekHaveList -History $all -Catalog $Catalog)
+            $systemRows = @(Get-CmdPeekSystemList -History $all -Catalog $Catalog)
             $activeCount = $view.Count
             $usageCount = 0
             if ($ui.View -eq 'gaps') {
@@ -725,6 +773,9 @@ function Invoke-CmdPeekTui {
             elseif ($ui.View -eq 'have') {
                 $activeCount = $haveRows.Count
             }
+            elseif ($ui.View -eq 'system') {
+                $activeCount = $systemRows.Count
+            }
             elseif ($view.Count -gt 0 -and $ui.Selected -lt $view.Count) {
                 $row = $view[$ui.Selected]
                 if ($row.PSObject.Properties['Usages'] -and $row.Usages) {
@@ -732,7 +783,7 @@ function Invoke-CmdPeekTui {
                 }
             }
 
-            Write-CmdPeekTuiFrame -State $ui -View $view -Gap $gaps -Have $haveRows -Width $width -Height $height
+            Write-CmdPeekTuiFrame -State $ui -View $view -Gap $gaps -Have $haveRows -System $systemRows -Width $width -Height $height
 
             $key = [Console]::ReadKey($true)
             $searching = ($ui.View -eq 'search')

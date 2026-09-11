@@ -169,22 +169,69 @@ function Get-CmdPeekBrewPackage {
     return @($packages)
 }
 
+function Get-CmdPeekSystemBinDenyName {
+    [CmdletBinding()]
+    param()
+
+    return @(
+        'notepad', 'calc', 'mspaint', 'write', 'wordpad', 'explorer', 'dwm', 'winlogon',
+        'csrss', 'smss', 'services', 'lsass', 'svchost', 'taskmgr', 'mmc', 'rundll32',
+        'dllhost', 'conhost', 'werfault', 'wermgr', 'searchindexer', 'runtimebroker',
+        'applicationframehost', 'systemsettings', 'wscript', 'cscript', 'mshta', 'hh',
+        'help', 'winver', 'logoff', 'userinit', 'splwow64', 'fontdrvhost', 'sihost',
+        'ctffmon', 'tabtip', 'textinputhost', 'control', 'regedt32', 'msiexec',
+        'searchhost', 'startmenuexperiencehost', 'shellexperiencehost', 'securityhealthsystray'
+    )
+}
+
+function Get-CmdPeekDefaultSystemBinRoot {
+    [CmdletBinding()]
+    param()
+
+    $roots = New-Object System.Collections.Generic.List[string]
+    $os = 'linux'
+    if (Get-Command Get-CmdPeekCurrentOs -ErrorAction SilentlyContinue) {
+        $os = Get-CmdPeekCurrentOs
+    }
+    elseif ($env:OS -eq 'Windows_NT') {
+        $os = 'windows'
+    }
+    if ($os -eq 'windows') {
+        $sys = $env:SystemRoot
+        if (-not $sys) { $sys = $env:WINDIR }
+        if ($sys) {
+            $roots.Add((Join-Path $sys 'System32'))
+        }
+    }
+    else {
+        foreach ($dir in @('/bin', '/usr/bin', '/usr/sbin')) {
+            if (Test-Path -LiteralPath $dir) { $roots.Add($dir) }
+        }
+    }
+    return @($roots)
+}
+
 function Add-CmdPeekPathCommands {
     [CmdletBinding()]
     param(
         [AllowEmptyCollection()]
         [object[]]$History,
         [hashtable]$Catalog,
-        [scriptblock]$CommandTester
+        [scriptblock]$CommandTester,
+        [switch]$IncludeSystemDirectories,
+        [string[]]$BinRoot,
+        [int]$UnknownLimit = 40,
+        [string]$DataDirectory
     )
 
-    if (-not $Catalog) { return @($History) }
+    if (-not $Catalog) { $Catalog = @{} }
     $existing = @{}
     foreach ($row in @($History)) {
         if ($row -and $row.Command) {
             foreach ($name in @(Get-CmdPeekCommandNamesFor -Command $row.Command -Catalog $Catalog)) {
                 $existing[$name.ToLowerInvariant()] = $true
             }
+            $existing[$row.Command.ToLowerInvariant()] = $true
         }
     }
 
@@ -195,29 +242,175 @@ function Add-CmdPeekPathCommands {
         }
     }
 
+    # Resolve the optional helpers once. Probing for them inside the scan loop costs
+    # one Get-Command per helper per file, which dominates the scan on a full bin dir.
+    $hasRowPackageManager = [bool](Get-Command Get-CmdPeekRowPackageManager -ErrorAction SilentlyContinue)
+    $hasCatalogOrigin = [bool](Get-Command Get-CmdPeekCatalogOrigin -ErrorAction SilentlyContinue)
+    $hasPeSubsystem = [bool](Get-Command Get-CmdPeekPeSubsystem -ErrorAction SilentlyContinue)
+    $hasCatalogEntry = [bool](Get-Command Get-CmdPeekCatalogEntry -ErrorAction SilentlyContinue)
+    $hasCanonical = [bool](Get-Command Get-CmdPeekCanonicalCommand -ErrorAction SilentlyContinue)
+
     $extra = New-Object System.Collections.Generic.List[object]
     foreach ($key in @($Catalog.Keys)) {
+        $lk = $key.ToLowerInvariant()
+        if ($existing.ContainsKey($lk)) { continue }
         $names = @(Get-CmdPeekCommandNamesFor -Command $key -Catalog $Catalog)
         $foundName = $null
         foreach ($name in $names) {
-            if ($existing.ContainsKey($name.ToLowerInvariant())) { $foundName = $null; break }
+            if ($existing.ContainsKey($name.ToLowerInvariant()) -and $name.ToLowerInvariant() -ne $lk) {
+                continue
+            }
             $visible = $false
             try { $visible = [bool](& $CommandTester $name) } catch { $visible = $false }
             if ($visible) { $foundName = $name; break }
         }
         if (-not $foundName) { continue }
+        $entry = $Catalog[$key]
+        $pm = 'path'
+        if ($hasRowPackageManager) {
+            $pm = Get-CmdPeekRowPackageManager -Entry $entry -Fallback 'path'
+        }
+        elseif ($entry -and $entry.PSObject.Properties['origin'] -and ([string]$entry.origin).ToLowerInvariant() -eq 'builtin') {
+            $pm = 'builtin'
+        }
+        $origin = 'path'
+        if ($hasCatalogOrigin) {
+            $origin = Get-CmdPeekCatalogOrigin -Entry $entry
+        }
         $existing[$foundName.ToLowerInvariant()] = $true
-        $existing[$key.ToLowerInvariant()] = $true
+        $existing[$lk] = $true
+        foreach ($alias in @($names)) {
+            $existing[$alias.ToLowerInvariant()] = $true
+        }
         $extra.Add([pscustomobject]@{
             Command        = $foundName
             PackageName    = $key
-            PackageManager = 'path'
+            PackageManager = $pm
             InstallDate    = [datetime]'2000-01-01'
             Version        = $null
             Favorite       = $false
             Hidden         = $false
             Category       = Get-CmdPeekCommandCategory -Command $key -Catalog $Catalog
+            Origin         = $origin
         })
+    }
+
+    $scanRoots = @()
+    if ($PSBoundParameters.ContainsKey('BinRoot') -and $null -ne $BinRoot) {
+        $scanRoots = @($BinRoot | Where-Object { $_ })
+    }
+    elseif ($IncludeSystemDirectories) {
+        $scanRoots = @(Get-CmdPeekDefaultSystemBinRoot)
+    }
+
+    if ($scanRoots.Count -gt 0) {
+        $deny = @{}
+        foreach ($n in @(Get-CmdPeekSystemBinDenyName)) { $deny[$n] = $true }
+        $unknown = New-Object System.Collections.Generic.List[object]
+        $seenFile = @{}
+
+        # Reading PE headers to skip GUI apps is the expensive part of a System32
+        # scan, and the answer only changes when the binary does.
+        $peCachePath = $null
+        $peCache = @{}
+        $peCacheDirty = $false
+        if ($hasPeSubsystem -and (Get-Command Get-CmdPeekPeSubsystemCachePath -ErrorAction SilentlyContinue)) {
+            $peCachePath = Get-CmdPeekPeSubsystemCachePath -DataDirectory $DataDirectory
+            if ($peCachePath) { $peCache = Import-CmdPeekPeSubsystemCache -Path $peCachePath }
+        }
+        foreach ($root in $scanRoots) {
+            if (-not $root -or -not (Test-Path -LiteralPath $root)) { continue }
+            $files = @(Get-ChildItem -LiteralPath $root -File -ErrorAction SilentlyContinue)
+            foreach ($file in $files) {
+                $ext = ''
+                if ($file.Extension) { $ext = $file.Extension.ToLowerInvariant() }
+                if ($ext -in @('.dll', '.sys', '.cpl', '.msc', '.scr', '.drv', '.mui', '.xml', '.txt', '.ini', '.dat', '.pdb')) {
+                    continue
+                }
+                $ok = $false
+                if ($ext -in @('.exe', '.cmd', '.bat', '.com')) { $ok = $true }
+                elseif ([string]::IsNullOrWhiteSpace($ext)) { $ok = $true }
+                if (-not $ok) { continue }
+
+                $stem = Get-CmdPeekCommandStem -FileName $file.Name
+                if (-not $stem) { continue }
+                $sk = $stem.ToLowerInvariant()
+                if ($seenFile.ContainsKey($sk)) { continue }
+                $seenFile[$sk] = $true
+                if ($deny.ContainsKey($sk)) { continue }
+                if ($existing.ContainsKey($sk)) { continue }
+
+                if ($ext -eq '.exe' -and $hasPeSubsystem) {
+                    $peKey = Get-CmdPeekPeSubsystemCacheKey -File $file
+                    if ($peKey -and $peCache.ContainsKey($peKey)) {
+                        $sub = $peCache[$peKey]
+                    }
+                    else {
+                        $sub = Get-CmdPeekPeSubsystem -Path $file.FullName
+                        if ($peKey) {
+                            $peCache[$peKey] = $sub
+                            $peCacheDirty = $true
+                        }
+                    }
+                    if ($sub -eq 2) { continue }
+                }
+
+                $entry = $null
+                if ($hasCatalogEntry) {
+                    $entry = Get-CmdPeekCatalogEntry -Command $stem -Catalog $Catalog
+                }
+                if ($entry) {
+                    $canonical = $stem
+                    if ($hasCanonical) {
+                        $canonical = Get-CmdPeekCanonicalCommand -Command $stem -Catalog $Catalog
+                    }
+                    $clk = $canonical.ToLowerInvariant()
+                    if ($existing.ContainsKey($clk)) { continue }
+                    $pm = 'path'
+                    if ($hasRowPackageManager) {
+                        $pm = Get-CmdPeekRowPackageManager -Entry $entry -Fallback 'path'
+                    }
+                    $origin = 'path'
+                    if ($hasCatalogOrigin) {
+                        $origin = Get-CmdPeekCatalogOrigin -Entry $entry
+                    }
+                    $existing[$sk] = $true
+                    $existing[$clk] = $true
+                    $extra.Add([pscustomobject]@{
+                        Command        = $stem
+                        PackageName    = $canonical
+                        PackageManager = $pm
+                        InstallDate    = [datetime]'2000-01-01'
+                        Version        = $null
+                        Favorite       = $false
+                        Hidden         = $false
+                        Category       = Get-CmdPeekCommandCategory -Command $canonical -Catalog $Catalog
+                        Origin         = $origin
+                    })
+                    continue
+                }
+
+                if ($UnknownLimit -gt 0 -and $unknown.Count -ge $UnknownLimit) { continue }
+                $unknown.Add([pscustomobject]@{
+                    Command        = $stem
+                    PackageName    = $stem
+                    PackageManager = 'path'
+                    InstallDate    = [datetime]'2000-01-01'
+                    Version        = $null
+                    Favorite       = $false
+                    Hidden         = $false
+                    Category       = 'other'
+                    Origin         = 'path'
+                })
+                $existing[$sk] = $true
+            }
+        }
+        $unknownSorted = @($unknown.ToArray() | Sort-Object @{ Expression = { $_.Command.ToLowerInvariant() } })
+        foreach ($row in $unknownSorted) { $extra.Add($row) }
+
+        if ($peCacheDirty -and $peCachePath) {
+            try { Export-CmdPeekPeSubsystemCache -Path $peCachePath -Entries $peCache } catch { }
+        }
     }
 
     return @(@($History) + @($extra.ToArray()))
@@ -237,14 +430,67 @@ function Get-CmdPeekDefaultUnixRoot {
     }
 }
 
-function Get-CmdPeekAptPackage {
+function Get-CmdPeekDefaultAptInfoRoot {
     [CmdletBinding()]
     param(
         [string]$StatusPath
     )
 
     if (-not $StatusPath) { $StatusPath = Get-CmdPeekDefaultUnixRoot -Manager apt }
+    $parent = Split-Path -Parent $StatusPath
+    if (-not $parent) { return $null }
+    return (Join-Path $parent 'info')
+}
+
+function Get-CmdPeekAptFileListMap {
+    [CmdletBinding()]
+    param(
+        [string]$InfoRoot
+    )
+
+    $map = @{}
+    if (-not $InfoRoot -or -not (Test-Path -LiteralPath $InfoRoot)) { return $map }
+    foreach ($file in @(Get-ChildItem -LiteralPath $InfoRoot -Filter '*.list' -File -ErrorAction SilentlyContinue)) {
+        # dpkg names multi-arch file lists "<package>:<arch>.list".
+        $stem = $file.Name.Substring(0, $file.Name.Length - 5)
+        $colon = $stem.IndexOf(':')
+        if ($colon -gt 0) { $stem = $stem.Substring(0, $colon) }
+        $key = $stem.ToLowerInvariant()
+        if (-not $map.ContainsKey($key)) { $map[$key] = $file.FullName }
+    }
+    return $map
+}
+
+function Get-CmdPeekAptPackageCommand {
+    [CmdletBinding()]
+    param(
+        [string]$ListPath
+    )
+
+    $commands = New-Object System.Collections.Generic.List[string]
+    if (-not $ListPath -or -not (Test-Path -LiteralPath $ListPath)) { return @($commands.ToArray()) }
+    foreach ($line in @(Get-Content -LiteralPath $ListPath -ErrorAction SilentlyContinue)) {
+        if (-not $line) { continue }
+        if ($line -notmatch '(^|/)s?bin/([^/]+)$') { continue }
+        $stem = Get-CmdPeekCommandStem -FileName $Matches[2]
+        if ($stem -and $commands -notcontains $stem) { $commands.Add($stem) }
+    }
+    return @($commands.ToArray())
+}
+
+function Get-CmdPeekAptPackage {
+    [CmdletBinding()]
+    param(
+        [string]$StatusPath,
+        [string]$InfoRoot
+    )
+
+    if (-not $StatusPath) { $StatusPath = Get-CmdPeekDefaultUnixRoot -Manager apt }
     if (-not (Test-Path -LiteralPath $StatusPath)) { return @() }
+    if (-not $PSBoundParameters.ContainsKey('InfoRoot')) {
+        $InfoRoot = Get-CmdPeekDefaultAptInfoRoot -StatusPath $StatusPath
+    }
+    $listMap = Get-CmdPeekAptFileListMap -InfoRoot $InfoRoot
 
     $raw = Get-Content -LiteralPath $StatusPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
     if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
@@ -271,7 +517,19 @@ function Get-CmdPeekAptPackage {
         if (-not $name) { continue }
         if (-not $status -or $status -notmatch 'install ok installed') { continue }
         $commands = New-Object System.Collections.Generic.List[string]
-        $commands.Add($name)
+        $listPath = $null
+        if ($listMap.Count -gt 0) { $listPath = $listMap[$name.ToLowerInvariant()] }
+        if ($listPath) {
+            # The dpkg file list tells us whether this package ships an executable at
+            # all. Libraries such as zlib1g ship none, and are not commands.
+            foreach ($binary in @(Get-CmdPeekAptPackageCommand -ListPath $listPath)) {
+                if ($commands -notcontains $binary) { $commands.Add($binary) }
+            }
+            if ($commands.Count -eq 0) { continue }
+        }
+        else {
+            $commands.Add($name)
+        }
         foreach ($p in $provides) {
             if ($p -and $commands -notcontains $p) { $commands.Add($p) }
         }

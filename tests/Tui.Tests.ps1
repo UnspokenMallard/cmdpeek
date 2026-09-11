@@ -48,6 +48,7 @@ Describe 'Convert-CmdPeekKey' {
         Convert-CmdPeekKey -Key 'H' -KeyChar 'h' | Should -Be 'Hide'
         Convert-CmdPeekKey -Key 'G' -KeyChar 'g' | Should -Be 'Gaps'
         Convert-CmdPeekKey -Key 'U' -KeyChar 'u' | Should -Be 'Have'
+        Convert-CmdPeekKey -Key 'S' -KeyChar 's' | Should -Be 'System'
         Convert-CmdPeekKey -Key 'C' -KeyChar 'c' | Should -Be 'Copy'
         Convert-CmdPeekKey -Key 'R' -KeyChar 'r' | Should -Be 'Run'
         Convert-CmdPeekKey -Key 'Oem2' -KeyChar '?' | Should -Be 'Help'
@@ -105,6 +106,14 @@ Describe 'Update-CmdPeekTuiState' {
         $state = New-CmdPeekTuiState
         $state = Update-CmdPeekTuiState -State $state -Action 'Have' -ViewCount 3
         $state.View | Should -Be 'have'
+        $state = Update-CmdPeekTuiState -State $state -Action 'Escape' -ViewCount 3
+        $state.View | Should -Be 'list'
+    }
+
+    It 'opens the system view with System and leaves it with escape' {
+        $state = New-CmdPeekTuiState
+        $state = Update-CmdPeekTuiState -State $state -Action 'System' -ViewCount 3
+        $state.View | Should -Be 'system'
         $state = Update-CmdPeekTuiState -State $state -Action 'Escape' -ViewCount 3
         $state.View | Should -Be 'list'
     }

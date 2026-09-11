@@ -60,6 +60,109 @@ Describe 'language and PATH scanners' {
         $merged.Command | Should -Contain 'jq'
         @($merged | Where-Object { $_.Command -eq 'jq' })[0].PackageManager | Should -Be 'path'
     }
+
+    It 'tags catalog builtins as builtin instead of path' {
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'
+                usages = @('tasklist'); install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $merged = @(Add-CmdPeekPathCommands -History @() -Catalog $catalog -CommandTester { param($n) $n -eq 'tasklist' })
+        @($merged | Where-Object { $_.Command -eq 'tasklist' })[0].PackageManager | Should -Be 'builtin'
+        @($merged | Where-Object { $_.Command -eq 'tasklist' })[0].Origin | Should -Be 'builtin'
+    }
+
+    It 'scans injected bin roots for unknown console names and skips denylisted ones' {
+        $root = Join-Path $TestDrive 'sys32'
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        New-Item -ItemType File -Force -Path (Join-Path $root 'weirdtool.exe') | Out-Null
+        New-Item -ItemType File -Force -Path (Join-Path $root 'notepad.exe') | Out-Null
+        $merged = @(Add-CmdPeekPathCommands -History @() -Catalog @{} -BinRoot @($root) -CommandTester { $false })
+        $merged.Command | Should -Contain 'weirdtool'
+        $merged.Command | Should -Not -Contain 'notepad'
+        @($merged | Where-Object { $_.Command -eq 'weirdtool' })[0].PackageManager | Should -Be 'path'
+        @($merged | Where-Object { $_.Command -eq 'weirdtool' })[0].Origin | Should -Be 'path'
+    }
+}
+
+Describe 'Get-CmdPeekAptPackage command filtering' {
+    BeforeAll {
+        function New-AptFixture {
+            param([string]$Root)
+
+            $info = Join-Path $Root 'info'
+            New-Item -ItemType Directory -Force -Path $info | Out-Null
+            $status = Join-Path $Root 'status'
+            @(
+                'Package: coreutils'
+                'Status: install ok installed'
+                'Version: 9.4-3'
+                ''
+                'Package: zlib1g'
+                'Status: install ok installed'
+                'Version: 1:1.3-1'
+                'Provides: libz1'
+                ''
+                'Package: mawk'
+                'Status: install ok installed'
+                'Version: 1.3.4'
+                'Provides: awk'
+                ''
+                'Package: ghost'
+                'Status: deinstall ok config-files'
+                'Version: 1.0'
+                ''
+            ) | Set-Content -LiteralPath $status -Encoding UTF8
+
+            @('/usr/bin/ls', '/usr/bin/cat', '/usr/share/man/man1/ls.1.gz') |
+                Set-Content -LiteralPath (Join-Path $info 'coreutils.list') -Encoding UTF8
+            @('/usr/lib/x86_64-linux-gnu/libz.so.1', '/usr/share/doc/zlib1g/copyright') |
+                Set-Content -LiteralPath (Join-Path $info 'zlib1g:amd64.list') -Encoding UTF8
+            @('/usr/bin/mawk') |
+                Set-Content -LiteralPath (Join-Path $info 'mawk.list') -Encoding UTF8
+
+            return $status
+        }
+    }
+
+    It 'drops library packages that ship no executable' {
+        $status = New-AptFixture -Root (Join-Path $TestDrive 'dpkg-libs')
+        $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
+        @($pkgs | Select-Object -ExpandProperty Name) | Should -Not -Contain 'zlib1g'
+    }
+
+    It 'uses the dpkg file list for command names instead of the package name' {
+        $status = New-AptFixture -Root (Join-Path $TestDrive 'dpkg-names')
+        $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
+        $coreutils = @($pkgs | Where-Object { $_.Name -eq 'coreutils' })[0]
+        @($coreutils.Commands) | Should -Be @('ls', 'cat')
+    }
+
+    It 'keeps Provides aliases for packages that do ship an executable' {
+        $status = New-AptFixture -Root (Join-Path $TestDrive 'dpkg-provides')
+        $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
+        $mawk = @($pkgs | Where-Object { $_.Name -eq 'mawk' })[0]
+        @($mawk.Commands) | Should -Contain 'mawk'
+        @($mawk.Commands) | Should -Contain 'awk'
+    }
+
+    It 'skips packages that are not fully installed' {
+        $status = New-AptFixture -Root (Join-Path $TestDrive 'dpkg-ghost')
+        $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
+        @($pkgs | Select-Object -ExpandProperty Name) | Should -Not -Contain 'ghost'
+    }
+
+    It 'falls back to the package name when no dpkg file lists exist' {
+        $root = Join-Path $TestDrive 'dpkg-nolists'
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        $status = Join-Path $root 'status'
+        @('Package: ripgrep', 'Status: install ok installed', 'Version: 14.1.0', '') |
+            Set-Content -LiteralPath $status -Encoding UTF8
+        $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
+        $pkgs.Count | Should -Be 1
+        @($pkgs[0].Commands) | Should -Be @('ripgrep')
+    }
 }
 
 Describe 'live apt and pacman default roots' {

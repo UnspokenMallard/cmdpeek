@@ -68,7 +68,7 @@ The file `winget/manifest.yaml` is a submission template for [winget-pkgs](https
 
 ### First run with no package manager
 
-cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt`, and `pacman`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog command names already on PATH are inventoried.
+cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt`, and `pacman`. If none of the Windows managers are on PATH it prints bootstrap commands and (in interactive mode) offers to run one. PATH-only machines still work: catalog names and curated OS builtins already on PATH are inventoried. System32 / `/bin` scans add extra console binaries (capped) that are not in the catalog.
 
 1. **Scoop** — user-level, recommended on Windows
 2. **Chocolatey** — typically needs an elevated shell
@@ -85,13 +85,18 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
 | `cmdpeek -Since 7d` | Time window for quick view / MCP: `last` (default), `all`, ISO datetime, `24h`, or `7d` (minutes not supported) |
 | `cmdpeek -Search rg` | Unique exact name: cheat sheet (usages + missing related). Otherwise search. |
 | `cmdpeek fd` | Unique command name: cheat sheet (usages, substitutes, install line). Otherwise search. |
-| `cmdpeek explain fd` | Same idea as the cheat sheet, plus PATH winner and substitutes |
-| `cmdpeek for json` | **Installed tools first**, then catalog tools to install |
-| `cmdpeek why jq` | Why this tool exists here: managers, PATH winner, substitutes |
+| `cmdpeek explain fd` | Command card: origin, gotchas, collisions, PATH winner, substitutes |
+| `cmdpeek for json` | **Installed tools first** (OS-aware), then catalog tools to install |
+| `cmdpeek why jq` | Why this tool exists here: origin, managers, PATH winner, substitutes |
+| `cmdpeek compare robocopy Copy-Item` | Side-by-side cards and which to prefer on this OS |
+| `cmdpeek suggest "ps aux"` | Map a command line to an installed equivalent |
 | `cmdpeek have search` | Installed catalog tools you can already use (optional capability) |
 | `cmdpeek agent-export` | Markdown playbook of this machine's installed tools (for agents) |
 | `cmdpeek search-available fzf` | Catalog search (installed vs missing + install commands) |
-| `cmdpeek gaps` | Human-readable gaps |
+| `cmdpeek gaps` | Human-readable gaps, ranked and capped |
+| `cmdpeek doctor` | Environment, catalog, and cache health check; `-Timing` adds per-stage scan timings |
+| `cmdpeek --version` | Module and MCP server versions, and whether they agree |
+| `cmdpeek catalog-lint` | Validate the catalog files against the schema and report field coverage (exit 1 on error) |
 | `cmdpeek -Category media` | Filter by catalog category |
 | `cmdpeek -Json` | Full inventory JSON (for MCP / scripts); add `-Refresh` to bypass cache |
 | `cmdpeek -Gaps` | JSON gaps: missing related, thin docs, not-on-path, **shadowing** (PATH winner), incomplete **kits** (with install commands), and **category-neighbor** |
@@ -102,6 +107,37 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
 | `cmdpeek -NonInteractive -n 5` | No prompts (CI / scripts) |
 | `cmdpeek -Hide LogExpert` | Hide a command from `-n` (still listed in `-i`) |
 | `cmdpeek -Star fd` | Favorite a command without opening the TUI |
+
+### Keeping answers small
+
+A populated machine has thousands of binaries on PATH, and an unbounded answer is useless to an agent with a context window. Gaps are ranked (incomplete kits first, then missing-related, shadowing, not-on-path, category-neighbor) and capped, and the `thin-docs` kind is left out of the default answer because it is mostly noise.
+
+`-Gaps` returns `{ gaps, summary }`. The summary carries `total`, `returned`, `truncated`, and a per-kind `counts` map, so nothing is hidden — you can see that 1198 thin-docs rows exist without being handed them:
+
+```json
+{
+  "gaps": [ { "kind": "missing-related", "command": "delta", "relatedTo": ["git"] } ],
+  "summary": {
+    "total": 1396, "returned": 50, "truncated": true,
+    "counts": { "kit": 0, "missing-related": 10, "shadowing": 0,
+                "not-on-path": 181, "category-neighbor": 7, "thin-docs": 1198 }
+  }
+}
+```
+
+| Flag | Effect |
+| --- | --- |
+| `-GapKind <kind>` | Only that kind. Naming `thin-docs` opts back into it. |
+| `-GapLimit <n>` | Cap the rows returned; `0` means uncapped |
+| `-TaskLimit <n>` | Cap matches per group in `for` / `resolve_task` |
+| `-ProbeLimit <n>` | Cap how many undocumented binaries get a `--help` probe (default 25) |
+| `-IncludeUndocumented` | Let `agent-export` list PATH commands that have no usages and no catalog entry |
+| `-DataDirectory <path>` | Read and write state somewhere other than `%LOCALAPPDATA%\cmdpeek` |
+| `-ExamplesPath <path>` | Load the catalog from somewhere other than `examples/` |
+
+`agent-export` drops rows with no usages, no catalog entry, and no star, because a playbook line that says only "this binary exists" teaches an agent nothing. On a machine with a full `/usr/bin` that is the difference between 1271 sections and 55.
+
+A full `-Json` inventory is cached for `InventoryCacheSeconds` (default 120, configurable in `state.json`) and served **before** the package-manager and PATH scan, so a warm call costs about half a second instead of rescanning. Only the unfiltered inventory is cached: a `-Search`, `-Category`, or `-Count` run would otherwise hand the next caller a partial machine.
 
 ### Interactive TUI
 
@@ -115,7 +151,7 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
                                           | > fd <pattern>                    # Find files
                                           |   fd -t f <pattern>               # Find files only
                                           | gaps: rg, fzf
-↑↓ move  ←→ pane  ↵ open/copy  / search  f fav  F favs  C cat  h hide  H hidden  g gaps  ? help  q quit
+↑↓ move  ←→ pane  ↵ open/copy  / search  f fav  F favs  C cat  h hide  H hidden  g gaps  u have  s system  ? help  q quit
 ```
 
 | Key | Action |
@@ -131,6 +167,7 @@ cmdpeek detects `choco`, `scoop`, `winget`, `pipx`, `npm`, `cargo`, `brew`, `apt
 | h | Hide/unhide this command from `cmdpeek -n` quick view (still listed in the TUI) |
 | g | Gap view — related CLIs you do not have, and commands with only `--help` |
 | u | Use what you have — installed catalog tools by category / capability |
+| s | System commands — OS builtins and system-category tools |
 | c / r | Copy or run the highlighted usage (`<placeholders>` are copied, not run) |
 | a | Clear filters |
 | ? or F1 | Key help |
@@ -169,9 +206,11 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | --- | --- |
 | `list_recent_commands` | Recency envelope from `-Json -Recent` (usages, related, install commands, PATH) |
 | `search_commands` | Find a CLI by name, category, capability, or usage text |
-| `get_command` | Full detail for **installed or catalog-only** names |
-| `resolve_task` | Task → **installed first**, then missing catalog tools |
-| `explain_command` | Usages, PATH winner, substitutes, install lines |
+| `get_command` | Full detail for **installed or catalog-only** names (origin, gotchas, collisions) |
+| `resolve_task` | Task → **installed first** (OS-aware builtins), then missing catalog tools |
+| `explain_command` | Command card: usages, origin, gotchas, PATH winner, substitutes |
+| `compare_commands` | Side-by-side cards and which to prefer on this OS |
+| `suggest_for_argv` | Map a hallucinated or off-OS argv to an installed equivalent |
 | `search_available` | Catalog search with install commands |
 | `list_installed_for` | Installed tools for a capability |
 | `list_gaps` | Missing related, thin docs, not-on-path, shadowing (PATH winner), kit, category-neighbor |
@@ -181,15 +220,18 @@ On Windows, `pwsh` is used to scan installs (`CMDPEEK_PWSH` overrides the shell)
 | `list_hidden` | Commands hidden from `-n` |
 | `set_hidden` | Hide/unhide a command from `-n` |
 | `set_favorite` | Star/unstar a command |
-| `install_package` | Dry-run install command (set `execute` only with consent) |
+| `install_package` | Dry-run install command (set `execute` only with consent; refuses builtins) |
 | `export_agent_playbook` | Markdown playbook of installed tools (prefer these over new packages) |
+| `diagnose` | Health check: versions, managers, catalog, caches (`timing` adds per-stage scan times) |
 | `refresh_inventory` | Rescan after install/uninstall (bypasses cache) |
 
-Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://recent`, `cmdpeek://last-install`, `cmdpeek://agent-export`.
+List-shaped tools are capped (25 rows for most, 20 for `list_recent_commands`) and accept `limit`. Each capped result reports `total`, `returned`, and `truncated`, so a truncated answer is never *silently* truncated. `list_gaps` also takes `summary: true` for counts only, and `kind` to ask for a kind the default answer omits. `cmdpeek://inventory` and `cmdpeek://system` page to 60 rows each; the unbounded snapshot is still reachable through the CLI.
 
-Prompts: `after_install`, `prefer_installed`.
+Resources: `cmdpeek://inventory`, `cmdpeek://gaps`, `cmdpeek://doctor`, `cmdpeek://recent`, `cmdpeek://last-install`, `cmdpeek://agent-export`, `cmdpeek://system`.
 
-Agents should call `resolve_task` before suggesting a new CLI, `refresh_inventory` + `list_recent_commands` after a package install, and must not run usages with `<placeholders>`.
+Prompts: `after_install`, `prefer_installed`, `prefer_system_then_installed`.
+
+Agents should call `resolve_task` before suggesting a new CLI, prefer OS builtins on this machine, call `refresh_inventory` + `list_recent_commands` after a package install, and must not run usages with `<placeholders>`.
 
 ### Uninstall detection
 
@@ -201,6 +243,35 @@ Command 'yt-dlp' was uninstalled. Reinstall it? [Y/n/chocolatey/scoop/winget]
 
 `-NonInteractive` prints the same information without prompting.
 
+### Health check
+
+`cmdpeek doctor` answers "why is cmdpeek behaving like that" without needing to read the source: which package managers it found and which it did not, whether the catalog parsed and how many commands it holds, how old each cache is and what the inventory TTL is, whether the data directory is writable, whether the profile hint is installed, and whether the module and MCP server versions agree.
+
+```
+cmdpeek 0.2.0  (mcp 0.2.0, PowerShell 7.6.5, linux)
+
+Data directory  C:\Users\you\AppData\Local\cmdpeek  [writable]
+Inventory cache 120s TTL
+  state          238 KB, 62s old
+  inventory      908 KB, 2523s old
+  help-text      45 KB, 2403s old
+  pe-subsystem   absent
+
+Package managers
+  present  scoop, chocolatey, npm
+  missing  winget, pipx, cargo, brew, apt, pacman
+
+Catalog  125 commands, 59 builtin, 13 kits, 0 learned
+
+Shell history
+  4212 lines  C:\Users\you\AppData\Roaming\...\ConsoleHost_history.txt
+Profile hint    installed  (C:\Users\you\Documents\PowerShell\Microsoft.PowerShell_profile.ps1)
+
+No problems found.
+```
+
+`cmdpeek doctor -Timing` times each scan stage separately (catalog load, package managers, history, PATH scan, gap analysis), which is how you tell a slow manager apart from a slow PATH. Anything cmdpeek considers wrong shows up in a `problems` list, and the same report is available as JSON with `-Json`, over MCP as `diagnose`, and as the `cmdpeek://doctor` resource.
+
 ## How install dates are found
 
 | Manager | Source |
@@ -211,7 +282,7 @@ Command 'yt-dlp' was uninstalled. Reinstall it? [Y/n/chocolatey/scoop/winget]
 | pipx / npm / cargo / brew | Isolated tool roots (`pipx` venvs, npm prefix, `~/.cargo/bin`, Homebrew Cellar) |
 | apt | `/var/lib/dpkg/status` (`install ok installed`) |
 | pacman | `/var/lib/pacman/local/*/desc` (`%NAME%`, `%VERSION%`, `%BUILDDATE%`) |
-| PATH | Catalog command names resolvable by `Get-Command` that no package manager claimed |
+| PATH | Catalog command names resolvable by `Get-Command` (builtins tagged `packageManager=builtin`) plus a capped System32/`/bin` scan of extra console binaries |
 
 Commands without a CLI shim (runtimes, fonts, GUI-only apps) are skipped.
 
@@ -231,7 +302,42 @@ Add-CmdPeekProfileHint -ProfilePath $PROFILE
 
 The wrappers call the real `scoop`/`choco`/`winget`/`pipx`/`npm`/`cargo`/`brew` executables, then `cmdpeek -NonInteractive -n 1` after an install (`npm` only for `npm install -g`). The same snippet registers `Add-CmdPeekHistoryTimestamp` so typed commands update `rusty-last-used.json`. Re-running the helper upgrades an older hint block in place and is a no-op when the current snippet is already present.
 
-Optional user catalog overlay: `%LOCALAPPDATA%\cmdpeek\catalog.overlay.json` (see `examples/catalog.overlay.example.json`).
+Optional user catalog overlay: `%LOCALAPPDATA%\cmdpeek\catalog.overlay.json` (see `examples/catalog.overlay.example.json`). Help-probe examples for unknown PATH binaries are saved to `catalog.learned.json` in the same directory. Curated OS builtins live in `examples/system-commands.json`.
+
+## The catalog
+
+`examples/usage-examples.json` (packages) and `examples/system-commands.json` (OS builtins) are merged at load time into one catalog of 125 commands and 13 kits. They are merged before anything reads them, so a `related` entry in one file may point at a command defined in the other.
+
+Beyond `usages`, each entry carries the fields an agent needs to *choose* a tool rather than just run one:
+
+| Field | Answers |
+| --- | --- |
+| `whenToUse` | What job this is the right answer for |
+| `whenNotToUse` | When to reach for something else instead |
+| `gotchas` | What bites you the first time, for example that `jq`'s single-quoted filters do not quote in `cmd.exe` |
+| `os` / `origin` | Where it runs, and whether it is a builtin or a package |
+| `substitutes` / `related` | What it replaces, and what pairs with it |
+| `capabilities` / `tasks` | How `for` and `have` find it |
+
+A name with no catalog entry is not assumed to be a package. If it resolves only as a shell alias, function, or cmdlet, cmdpeek reports `origin: builtin` and offers no install line, because `scoop install cd` is not a thing. A name that resolves to an executable, or to nothing, still gets a best-guess install line so `explain` stays useful for packages the catalog has not learned yet.
+
+`cmdpeek catalog-lint` validates both files against `examples/usage-examples.schema.json`, checks that every `related`, `substitutes`, and kit member resolves in the merged catalog, and reports per-field coverage. It exits 1 on any error, so it can gate a build, and it runs on every push:
+
+```
+/workspace/examples/usage-examples.json  71 commands, 6 kits
+  schema valid
+
+  agent-facing field coverage
+    whenToUse     100%  ####################  71/71
+    whenNotToUse  100%  ####################  71/71
+    gotchas        76%  ###############.....  54/71
+    ...
+
+Merged catalog: 125 commands, 13 kits
+  every related, substitute, and kit member resolves
+
+No catalog errors.
+```
 
 ## Development
 
@@ -240,12 +346,19 @@ Import-Module .\src\cmdpeek.psd1 -Force
 Invoke-Pester -Path .\tests
 .\src\cmdpeek.ps1 -NonInteractive -n 5
 .\src\cmdpeek.ps1 -Json
+.\src\cmdpeek.ps1 catalog-lint
+.\scripts\Invoke-CmdPeekSmoke.ps1
+Invoke-ScriptAnalyzer -Path .\src -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
 .\scripts\New-CmdPeekReleaseArchive.ps1 -OutputDirectory .\dist
 .\scripts\New-CmdPeekReleaseArchive.ps1 -OutputDirectory .\dist -UpdateManifest
-cd mcp; npm install; npm run build
+cd mcp; npm install; npm run build; npm test
 ```
 
 Requires [Pester](https://pester.dev/) 5+ (`Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck`).
+
+The Pester suite mocks the filesystem, so it proves the logic but not that cmdpeek works on a real machine. `scripts/Invoke-CmdPeekSmoke.ps1` covers that gap: it runs the CLI end to end against the machine it is on and asserts on exit codes, JSON validity, payload size, and wall-clock budgets. CI runs it on both `windows-latest` and `ubuntu-latest`, alongside the catalog lint and PSScriptAnalyzer.
+
+Note that PowerShell 5.1 reads a BOM-less file as ANSI, so any script containing non-ASCII characters (the TUI's box and arrow glyphs, em dashes) needs a UTF-8 BOM or it renders as mojibake.
 
 ## License
 

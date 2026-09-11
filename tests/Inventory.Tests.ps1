@@ -278,6 +278,29 @@ Describe 'Get-CmdPeekGap' {
         $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog)
         @($gaps | Where-Object { $_.kind -eq 'missing-related' -and $_.command -eq 'grep' }).Count | Should -Be 0
     }
+
+    It 'does not suggest a related builtin that does not apply to this OS' {
+        $history = @(
+            [pscustomobject]@{
+                Command = 'tasklist'; PackageName = 'tasklist'; PackageManager = 'builtin'
+                Category = 'system'; Usages = @('tasklist'); Related = @('ps')
+            }
+        )
+        $catalog = @{
+            'tasklist' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('windows')
+                related = @('ps'); usages = @('tasklist')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+            'ps' = [pscustomobject]@{
+                category = 'system'; origin = 'builtin'; os = @('linux', 'macos')
+                related = @('tasklist'); usages = @('ps aux')
+                install = [pscustomobject]@{ builtin = $true }
+            }
+        }
+        $gaps = @(Get-CmdPeekGap -History $history -Catalog $catalog -Os windows)
+        @($gaps | Where-Object { $_.kind -eq 'missing-related' -and $_.command -eq 'ps' }).Count | Should -Be 0
+    }
 }
 
 Describe 'ConvertTo-CmdPeekSnapshot' {
@@ -411,5 +434,104 @@ Describe 'ConvertTo-CmdPeekSnapshot' {
         Test-Path -LiteralPath $sidecar | Should -BeTrue
         $after = Get-Content -LiteralPath $sidecar -Raw -Encoding UTF8
         $after | Should -Match '2026-03-02T14:11:00Z'
+    }
+}
+
+Describe 'Select-CmdPeekGap' {
+    BeforeAll {
+        $script:mixed = @(
+            [pscustomobject]@{ kind = 'thin-docs'; command = 'zzz'; reason = 'no usages' }
+            [pscustomobject]@{ kind = 'category-neighbor'; command = 'bat'; reason = 'neighbor' }
+            [pscustomobject]@{ kind = 'kit'; command = 'delta'; reason = 'kit' }
+            [pscustomobject]@{ kind = 'missing-related'; command = 'ffmpeg'; reason = 'related' }
+            [pscustomobject]@{ kind = 'thin-docs'; command = 'aaa'; reason = 'no usages' }
+            [pscustomobject]@{ kind = 'shadowing'; command = 'jq'; reason = 'two managers' }
+        )
+    }
+
+    It 'omits thin-docs by default' {
+        $kept = @(Select-CmdPeekGap -Gap $script:mixed)
+        @($kept | Select-Object -ExpandProperty kind) | Should -Not -Contain 'thin-docs'
+        $kept.Count | Should -Be 4
+    }
+
+    It 'ranks actionable kinds before advisory ones' {
+        $kept = @(Select-CmdPeekGap -Gap $script:mixed)
+        @($kept | Select-Object -ExpandProperty kind) | Should -Be @('kit', 'missing-related', 'shadowing', 'category-neighbor')
+    }
+
+    It 'returns a single kind when asked explicitly, including noisy kinds' {
+        $kept = @(Select-CmdPeekGap -Gap $script:mixed -Kind 'thin-docs')
+        $kept.Count | Should -Be 2
+        @($kept | Select-Object -ExpandProperty command) | Should -Be @('aaa', 'zzz')
+    }
+
+    It 'treats "all" as every kind including thin-docs' {
+        $kept = @(Select-CmdPeekGap -Gap $script:mixed -Kind 'all')
+        $kept.Count | Should -Be 6
+    }
+
+    It 'caps the result and leaves the highest ranked kinds' {
+        $kept = @(Select-CmdPeekGap -Gap $script:mixed -Limit 2)
+        $kept.Count | Should -Be 2
+        @($kept | Select-Object -ExpandProperty kind) | Should -Be @('kit', 'missing-related')
+    }
+
+    It 'treats a limit of zero as uncapped' {
+        $kept = @(Select-CmdPeekGap -Gap $script:mixed -Kind 'all' -Limit 0)
+        $kept.Count | Should -Be 6
+    }
+}
+
+Describe 'Get-CmdPeekGapSummary' {
+    It 'counts every kind including the ones excluded from the default answer' {
+        $summary = Get-CmdPeekGapSummary -Gap @(
+            [pscustomobject]@{ kind = 'thin-docs'; command = 'a' }
+            [pscustomobject]@{ kind = 'thin-docs'; command = 'b' }
+            [pscustomobject]@{ kind = 'kit'; command = 'c' }
+        )
+        $summary.total | Should -Be 3
+        $summary.counts.'thin-docs' | Should -Be 2
+        $summary.counts.kit | Should -Be 1
+        $summary.counts.shadowing | Should -Be 0
+    }
+}
+
+Describe 'snapshot gap payload' {
+    It 'caps gaps, omits thin-docs, and reports the full total in the summary' {
+        $history = @(
+            foreach ($i in 1..80) {
+                [pscustomobject]@{
+                    Command = ('tool{0}' -f $i); PackageName = ('tool{0}' -f $i)
+                    PackageManager = 'apt'; Category = 'other'; Usages = @(); Related = @()
+                }
+            }
+        )
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} `
+            -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{} -HistoryPath @()
+
+        @($snap.gaps | Select-Object -ExpandProperty kind) | Should -Not -Contain 'thin-docs'
+        $snap.gapSummary.total | Should -Be 80
+        $snap.gapSummary.counts.'thin-docs' | Should -Be 80
+        $snap.gapSummary.truncated | Should -BeTrue
+    }
+
+    It 'honours an explicit gap kind and limit' {
+        $history = @(
+            foreach ($i in 1..80) {
+                [pscustomobject]@{
+                    Command = ('tool{0}' -f $i); PackageName = ('tool{0}' -f $i)
+                    PackageManager = 'apt'; Category = 'other'; Usages = @(); Related = @()
+                }
+            }
+        )
+        $snap = ConvertTo-CmdPeekSnapshot -History $history -Manager @() -Catalog @{} `
+            -Favorite @() -Hidden @() -CommandTester { $true } -Kits @{} -HistoryPath @() `
+            -GapKind 'thin-docs' -GapLimit 5
+
+        @($snap.gaps).Count | Should -Be 5
+        @($snap.gaps)[0].kind | Should -Be 'thin-docs'
+        $snap.gapSummary.returned | Should -Be 5
+        $snap.gapSummary.total | Should -Be 80
     }
 }
