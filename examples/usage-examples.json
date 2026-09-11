@@ -3,6 +3,18 @@
   "commands": {
     "yt-dlp": {
       "category": "media",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Download video and audio from thousands of sites, with format selection and playlists.",
+      "whenNotToUse": "For image galleries gallery-dl handles more sites.",
+      "gotchas": [
+        "Needs ffmpeg on PATH to merge separate video and audio streams.",
+        "Extractors break when sites change. Update before reporting a failure."
+      ],
       "usages": [
         "yt-dlp <URL>                    # Download video",
         "yt-dlp -f bestaudio <URL>       # Extract audio only",
@@ -38,6 +50,18 @@
     },
     "ffmpeg": {
       "category": "media",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Convert, cut, resize or re-encode audio and video. The tool everything else wraps.",
+      "whenNotToUse": "To download from a site use yt-dlp, which calls ffmpeg for you.",
+      "gotchas": [
+        "Argument order matters: options before -i apply to the input, after it to the output.",
+        "-c copy remuxes without re-encoding and is orders of magnitude faster when it applies."
+      ],
       "usages": [
         "ffmpeg -i input.mp4 output.mp3  # Convert video to audio",
         "ffmpeg -i in.mp4 -ss 00:00:10 -to 00:00:20 -c copy cut.mp4  # Cut clip",
@@ -69,6 +93,17 @@
     },
     "mpv": {
       "category": "media",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Play a video or audio file, including straight from a URL.",
+      "whenNotToUse": "To convert or cut rather than watch, use ffmpeg.",
+      "gotchas": [
+        "Can play a yt-dlp URL directly, but only when yt-dlp is on PATH."
+      ],
       "usages": [
         "mpv <file>                      # Play media",
         "mpv --no-video <file>           # Audio only"
@@ -97,6 +132,17 @@
     },
     "gallery-dl": {
       "category": "media",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Download image galleries and artist archives, with site-specific naming rules.",
+      "whenNotToUse": "For video use yt-dlp.",
+      "gotchas": [
+        "Many sites need credentials or cookies in gallery-dl.conf before anything downloads."
+      ],
       "usages": [
         "gallery-dl <URL>                # Download gallery",
         "gallery-dl -g <URL>             # Print URLs only"
@@ -125,6 +171,20 @@
     },
     "fd": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "fdfind"
+      ],
+      "whenToUse": "Find files by name. Sensible defaults, regex by default, and it respects .gitignore.",
+      "whenNotToUse": "To act on the results in a pipeline of PowerShell objects, Get-ChildItem gives you objects.",
+      "gotchas": [
+        "Debian and Ubuntu install the binary as fdfind to avoid a name clash. Alias fd to it."
+      ],
       "usages": [
         "fd <pattern>                    # Find files",
         "fd -t f <pattern>               # Find files only",
@@ -134,9 +194,6 @@
       "related": [
         "rg",
         "fzf"
-      ],
-      "aliases": [
-        "fdfind"
       ],
       "capabilities": [
         "search",
@@ -161,6 +218,20 @@
     },
     "rg": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "ripgrep"
+      ],
+      "whenToUse": "Search code recursively. Respects .gitignore, skips binaries, and is the fastest option here.",
+      "whenNotToUse": "To match a literal string with regex metacharacters in it, pass -F.",
+      "gotchas": [
+        "Honours .gitignore by default, so it will silently skip ignored files. Pass -u, -uu or -uuu to widen."
+      ],
       "usages": [
         "rg <pattern>                    # Search recursively",
         "rg -i <pattern>                 # Case-insensitive search",
@@ -170,9 +241,6 @@
       "related": [
         "fd",
         "fzf"
-      ],
-      "aliases": [
-        "ripgrep"
       ],
       "capabilities": [
         "search",
@@ -198,6 +266,20 @@
     },
     "ripgrep": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "rg"
+      ],
+      "whenToUse": "The package name for rg. Install this; run rg.",
+      "whenNotToUse": "Do not type ripgrep at a prompt: the binary is called rg.",
+      "gotchas": [
+        "ripgrep is the package; rg is the command."
+      ],
       "usages": [
         "rg <pattern>                    # Search recursively",
         "rg -i <pattern>                 # Case-insensitive search"
@@ -205,9 +287,6 @@
       "related": [
         "fd",
         "fzf"
-      ],
-      "aliases": [
-        "rg"
       ],
       "capabilities": [
         "search",
@@ -233,8 +312,13 @@
     "grep": {
       "category": "dev-tools",
       "origin": "package",
-      "os": ["linux", "macos"],
-      "shell": ["posix"],
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
       "gotchas": [
         "Not a Windows builtin. Git for Windows may ship grep.exe; prefer findstr or Select-String on Windows PowerShell."
       ],
@@ -269,8 +353,12 @@
     "findstr": {
       "category": "system",
       "origin": "builtin",
-      "os": ["windows"],
-      "shell": ["cmd"],
+      "os": [
+        "windows"
+      ],
+      "shell": [
+        "cmd"
+      ],
       "gotchas": [
         "Use findstr.exe. PowerShell find is not this command."
       ],
@@ -302,6 +390,17 @@
     },
     "jq": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Query and reshape JSON on the command line. The default answer for JSON in a pipeline.",
+      "whenNotToUse": "For an interactive look at an unfamiliar document, fx is easier to explore with.",
+      "gotchas": [
+        "Single quotes do not quote in cmd.exe. In PowerShell and cmd, wrap filters in double quotes and escape inner ones."
+      ],
       "usages": [
         "jq '.field' file.json           # Extract field",
         "jq 'map(.name)' file.json       # Transform array",
@@ -335,6 +434,17 @@
     },
     "yq": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Query YAML with jq syntax, and convert between YAML, JSON and TOML.",
+      "whenNotToUse": "For JSON only, jq is the more widely installed tool.",
+      "gotchas": [
+        "Two unrelated programs are called yq. The Go one (mikefarah) takes eval; the Python wrapper takes jq syntax directly."
+      ],
       "usages": [
         "yq '.field' file.yaml           # Extract field",
         "yq -o json file.yaml            # Convert YAML to JSON"
@@ -365,6 +475,14 @@
     },
     "fx": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Explore an unfamiliar JSON document interactively, folding and unfolding as you go.",
+      "whenNotToUse": "In a script or a pipeline use jq; fx is built around a TTY.",
       "usages": [
         "fx file.json                    # Interactive JSON viewer",
         "fx file.json .field             # Extract field"
@@ -392,6 +510,14 @@
     },
     "git": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Version control. Everything else in this category is a friendlier front end to it.",
+      "whenNotToUse": "Nothing substitutes for it; lazygit, tig and gh all drive git underneath.",
       "usages": [
         "git status                      # Show working tree",
         "git log --oneline -n 20         # Compact history",
@@ -424,6 +550,17 @@
     },
     "gh": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Do GitHub things from the terminal: pull requests, issues, releases, CI runs.",
+      "whenNotToUse": "For anything that touches commits and branches, use git.",
+      "gotchas": [
+        "Needs gh auth login first. In CI, set GH_TOKEN instead."
+      ],
       "usages": [
         "gh repo view                    # Show current repo",
         "gh pr create                    # Open a pull request",
@@ -452,6 +589,17 @@
     },
     "delta": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Make git diff readable: syntax highlighting, side-by-side, and word-level changes.",
+      "whenNotToUse": "It is a pager for git, not a standalone differ. For two loose files use diff.",
+      "gotchas": [
+        "Does nothing until git is configured to use it as core.pager and interactive.diffFilter."
+      ],
       "usages": [
         "git diff | delta                # Highlighted git diff",
         "delta file.old file.new         # Compare two files"
@@ -478,6 +626,14 @@
     },
     "lazygit": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Stage hunks, rebase, and resolve conflicts in a terminal UI, without memorising git flags.",
+      "whenNotToUse": "In a script or over a pipe use git; lazygit needs a TTY.",
       "usages": [
         "lazygit                         # Open git TUI",
         "lazygit -p <path>               # Open repo at path"
@@ -507,6 +663,14 @@
     },
     "tig": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Browse git history and blame in a terminal pager, commit by commit.",
+      "whenNotToUse": "To stage, commit or rebase interactively, lazygit does more.",
       "usages": [
         "tig                             # Browse git history",
         "tig status                      # Status view"
@@ -535,6 +699,20 @@
     },
     "httpie": {
       "category": "network",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "http"
+      ],
+      "whenToUse": "Call an HTTP API with readable syntax and coloured, pretty-printed JSON responses.",
+      "whenNotToUse": "In CI or a Dockerfile curl is already present and needs no Python.",
+      "gotchas": [
+        "httpie is the package; the command is http. On Debian it may install as http or httpie depending on version."
+      ],
       "usages": [
         "http GET https://api.example.com/v1/health  # GET request",
         "http POST https://api.example.com name=cmdpeek  # Form POST",
@@ -543,9 +721,6 @@
       "related": [
         "curl",
         "wget"
-      ],
-      "aliases": [
-        "http"
       ],
       "capabilities": [
         "http",
@@ -571,6 +746,20 @@
     },
     "http": {
       "category": "network",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "httpie"
+      ],
+      "whenToUse": "The command HTTPie installs. Sends JSON by default and pretty-prints the response.",
+      "whenNotToUse": "In CI or a Dockerfile curl is already present and needs no Python.",
+      "gotchas": [
+        "Clashes with other tools named http on PATH. httpie also installs https for TLS-by-default."
+      ],
       "usages": [
         "http GET https://example.com    # GET request",
         "http POST :8080/api id:=1       # JSON POST to localhost"
@@ -578,9 +767,6 @@
       "related": [
         "curl",
         "wget"
-      ],
-      "aliases": [
-        "httpie"
       ],
       "capabilities": [
         "http",
@@ -606,6 +792,12 @@
     },
     "curl": {
       "category": "network",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
       "usages": [
         "curl https://example.com        # Fetch URL",
         "curl -I https://example.com     # Headers only",
@@ -643,6 +835,17 @@
     },
     "wget": {
       "category": "network",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Download a file or mirror a site, with retries and resume built in.",
+      "whenNotToUse": "For API calls with headers and methods, curl or httpie read better.",
+      "gotchas": [
+        "Not present on macOS by default, and Windows PowerShell aliases wget to Invoke-WebRequest. Call wget.exe."
+      ],
       "usages": [
         "wget https://example.com/file.zip  # Download file",
         "wget -r -np -k https://example.com/docs/  # Mirror site section"
@@ -672,6 +875,17 @@
     },
     "aria2c": {
       "category": "network",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Download large files fast by opening several connections, and resume when they break.",
+      "whenNotToUse": "For a small file or an API call the extra connections buy nothing; use curl.",
+      "gotchas": [
+        "Some servers rate-limit or reject multi-connection downloads. Drop -x if transfers fail."
+      ],
       "usages": [
         "aria2c <URL>                    # Download file",
         "aria2c -x 16 <URL>              # Multi-connection download"
@@ -702,6 +916,17 @@
     },
     "7z": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Extract or create almost any archive format, including rar and 7z that tar cannot read.",
+      "whenNotToUse": "For plain .tar.gz on a POSIX box tar is already there and needs no install.",
+      "gotchas": [
+        "The binary is 7z on Linux and 7z.exe on Windows; some Scoop manifests install it as 7zz."
+      ],
       "usages": [
         "7z a archive.7z folder          # Create archive",
         "7z x archive.7z                 # Extract",
@@ -732,6 +957,17 @@
     },
     "tar": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Pack or unpack .tar, .tar.gz and .tar.xz. Present on Windows 10+ as well as every POSIX box.",
+      "whenNotToUse": "For .zip, .rar or .7z reach for 7z instead.",
+      "gotchas": [
+        "Windows bsdtar does not support --same-owner or the GNU long option spellings."
+      ],
       "usages": [
         "tar -xf archive.tar.gz          # Extract gzip tarball",
         "tar -czf archive.tar.gz folder  # Create gzip tarball"
@@ -759,6 +995,18 @@
     },
     "bat": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Read a file with syntax highlighting, line numbers, and git gutter marks.",
+      "whenNotToUse": "When piping into another program use cat, or pass --plain, since bat paginates by default.",
+      "gotchas": [
+        "Debian and Ubuntu install the binary as batcat.",
+        "Pipes to a pager when the output is a TTY. Use --paging=never in scripts."
+      ],
       "usages": [
         "bat file.ps1                    # Print file with syntax highlighting",
         "bat -n file.ps1                 # Show line numbers"
@@ -789,6 +1037,17 @@
     },
     "less": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Page through long output, search inside it, and scroll backwards.",
+      "whenNotToUse": "For a file you want highlighted, bat is nicer when installed.",
+      "gotchas": [
+        "Windows PowerShell has no less; more.com is the builtin equivalent."
+      ],
       "usages": [
         "less file.txt                   # Page through a file",
         "less +F logfile                 # Follow a growing file"
@@ -816,6 +1075,17 @@
     },
     "fzf": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Filter any list interactively. Pipe something in, pick something out.",
+      "whenNotToUse": "In a script with no TTY it will hang waiting for input; use rg or fd filters instead.",
+      "gotchas": [
+        "Shell keybindings (Ctrl-R, Ctrl-T) need the fzf key-bindings script sourced in your profile."
+      ],
       "usages": [
         "fzf                             # Fuzzy-find from stdin",
         "fd | fzf                        # Pick a file from fd results"
@@ -844,6 +1114,17 @@
     },
     "eza": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "A directory listing with colour, icons, git status, and a tree mode.",
+      "whenNotToUse": "In scripts parse nothing; use fd or Get-ChildItem.",
+      "gotchas": [
+        "The successor to exa, which is unmaintained. Flags are close but not identical."
+      ],
       "usages": [
         "eza -l                          # Long listing",
         "eza -T                          # Tree view",
@@ -851,7 +1132,8 @@
       ],
       "related": [
         "fd",
-        "bat"
+        "bat",
+        "lsd"
       ],
       "capabilities": [
         "files",
@@ -876,6 +1158,14 @@
     },
     "lsd": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "An ls replacement with colour and icons, and closer to ls flags than eza.",
+      "whenNotToUse": "In scripts parse nothing; use fd or Get-ChildItem.",
       "usages": [
         "lsd -l                          # Long listing",
         "lsd --tree                      # Tree view"
@@ -905,6 +1195,18 @@
     },
     "docker": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Build and run containers locally.",
+      "whenNotToUse": "For a Kubernetes cluster use kubectl; docker only sees the local daemon.",
+      "gotchas": [
+        "Needs a running daemon. On Windows and macOS that means Docker Desktop or an equivalent VM.",
+        "docker-compose (hyphen) is the old v1 binary. Current syntax is docker compose."
+      ],
       "usages": [
         "docker ps                       # List running containers",
         "docker run --rm -it alpine      # Run ephemeral container",
@@ -933,6 +1235,14 @@
     },
     "lazydocker": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Watch and manage local containers, images and logs in a terminal UI.",
+      "whenNotToUse": "In a script use docker; lazydocker needs a TTY.",
       "usages": [
         "lazydocker                      # Docker TUI"
       ],
@@ -956,6 +1266,14 @@
     },
     "dive": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "See what each layer of an image adds, and find the wasted space.",
+      "whenNotToUse": "To run or build images use docker.",
       "usages": [
         "dive <image>                    # Inspect image layers"
       ],
@@ -977,6 +1295,17 @@
     },
     "kubectl": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Talk to a Kubernetes cluster: inspect, apply, log, exec.",
+      "whenNotToUse": "For local single-host containers use docker.",
+      "gotchas": [
+        "Acts on the current kubeconfig context. Check kubectl config current-context before anything destructive."
+      ],
       "usages": [
         "kubectl get pods                # List pods",
         "kubectl logs <pod>              # Stream pod logs",
@@ -1006,6 +1335,17 @@
     },
     "helm": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install and upgrade packaged Kubernetes applications, with values files and rollback.",
+      "whenNotToUse": "For a handful of plain manifests kubectl apply is less machinery.",
+      "gotchas": [
+        "Helm 2 needed a cluster-side Tiller; Helm 3 does not. Old guides will not match."
+      ],
       "usages": [
         "helm list                       # List releases",
         "helm install <name> <chart>     # Install chart"
@@ -1031,6 +1371,14 @@
     },
     "k9s": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Browse and act on a live cluster in a terminal UI, with logs and shells one key away.",
+      "whenNotToUse": "In a script use kubectl; k9s needs a TTY.",
       "usages": [
         "k9s                             # Kubernetes TUI",
         "k9s -n <namespace>              # Open a namespace"
@@ -1056,6 +1404,17 @@
     },
     "terraform": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Declare and apply infrastructure. The original, now under a source-available licence.",
+      "whenNotToUse": "If the licence matters to you, opentofu is the MPL fork and takes the same config.",
+      "gotchas": [
+        "State is authoritative. Never edit it by hand, and never run apply against a state you do not own."
+      ],
       "usages": [
         "terraform init                  # Initialize working directory",
         "terraform plan                  # Preview changes",
@@ -1087,6 +1446,20 @@
     },
     "opentofu": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "tofu"
+      ],
+      "whenToUse": "The MPL-licensed fork of Terraform. Same HCL, same providers, open licence.",
+      "whenNotToUse": "A team already standardised on terraform should stay there; mixing state between them is risky.",
+      "gotchas": [
+        "The binary is tofu, not opentofu."
+      ],
       "usages": [
         "tofu init                       # Initialize working directory",
         "tofu plan                       # Preview changes",
@@ -1095,9 +1468,6 @@
       "related": [
         "terraform",
         "packer"
-      ],
-      "aliases": [
-        "tofu"
       ],
       "capabilities": [
         "infra",
@@ -1119,6 +1489,14 @@
     },
     "packer": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Build identical machine images for several platforms from one template.",
+      "whenNotToUse": "To provision running infrastructure use terraform or opentofu.",
       "usages": [
         "packer init template.pkr.hcl    # Init plugins",
         "packer build template.pkr.hcl   # Build image"
@@ -1143,6 +1521,14 @@
     },
     "node": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Run JavaScript and TypeScript tooling outside a browser.",
+      "whenNotToUse": "To switch between project Node versions use fnm rather than reinstalling node.",
       "usages": [
         "node app.js                     # Run a script",
         "node -e \"console.log('hi')\"     # Evaluate inline"
@@ -1170,6 +1556,14 @@
     },
     "pnpm": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install Node dependencies with a content-addressed store, so repeated installs are near instant.",
+      "whenNotToUse": "A repo with a committed package-lock.json or yarn.lock expects that tool instead.",
       "usages": [
         "pnpm install                    # Install dependencies",
         "pnpm run <script>               # Run a package script"
@@ -1199,6 +1593,17 @@
     },
     "yarn": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install Node dependencies in a repo that has a yarn.lock.",
+      "whenNotToUse": "Do not mix with npm or pnpm in the same repo; the lockfiles disagree.",
+      "gotchas": [
+        "Yarn 1 and Yarn 2+ (Berry) take different commands. Check the packageManager field in package.json."
+      ],
       "usages": [
         "yarn install                    # Install dependencies",
         "yarn <script>                   # Run a package script"
@@ -1227,6 +1632,17 @@
     },
     "fnm": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install and switch Node versions per directory, driven by .node-version or .nvmrc.",
+      "whenNotToUse": "If you only ever need one Node version, installing node directly is simpler.",
+      "gotchas": [
+        "Needs a shell hook (fnm env) in your profile before cd will switch versions."
+      ],
       "usages": [
         "fnm install --lts               # Install latest LTS Node",
         "fnm use <version>               # Switch Node version"
@@ -1251,6 +1667,17 @@
     },
     "python": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Run Python and its stdlib tooling, including venv and http.server.",
+      "whenNotToUse": "On Windows the launcher py picks the right version; on Debian the binary is python3.",
+      "gotchas": [
+        "Debian and Ubuntu ship no bare python. Call python3, or install python-is-python3."
+      ],
       "usages": [
         "python script.py                # Run a script",
         "python -m venv .venv            # Create virtualenv",
@@ -1284,6 +1711,14 @@
     },
     "uv": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Create venvs and resolve Python dependencies. Much faster than pip, and it can install Python itself.",
+      "whenNotToUse": "For installing a standalone Python CLI, pipx keeps each tool isolated.",
       "usages": [
         "uv venv                         # Create virtualenv",
         "uv pip install requests         # Install package",
@@ -1314,6 +1749,17 @@
     },
     "pipx": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install a Python CLI into its own virtualenv so it cannot break another tool.",
+      "whenNotToUse": "For a library your project imports use uv or pip inside the project venv.",
+      "gotchas": [
+        "pipx install puts the binary in ~/.local/bin, which is not on PATH by default. Run pipx ensurepath once."
+      ],
       "usages": [
         "pipx install <pkg>              # Install CLI in isolated env",
         "pipx list                       # List installed CLIs"
@@ -1342,6 +1788,15 @@
     },
     "py": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows"
+      ],
+      "whenToUse": "Pick a Python version on Windows without juggling PATH: py -3.12 runs that interpreter.",
+      "whenNotToUse": "Not present on Linux or macOS.",
+      "gotchas": [
+        "Reads py.ini and the #! line of the script, so py script.py may not use the version you expect."
+      ],
       "usages": [
         "py -3 script.py                 # Run with Python 3",
         "py -0p                          # List installed interpreters"
@@ -1366,6 +1821,17 @@
     },
     "nvim": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Vim with Lua config, LSP, and treesitter built in.",
+      "whenNotToUse": "On a machine you do not own, vim is the one that will already be installed.",
+      "gotchas": [
+        "Ignores ~/.vimrc. Config lives in ~/.config/nvim (or $LOCALAPPDATA/nvim on Windows)."
+      ],
       "usages": [
         "nvim file.txt                   # Edit file",
         "nvim +PlugInstall               # Run command on start"
@@ -1395,6 +1861,17 @@
     },
     "vim": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Edit a file over SSH or on a box where nothing else is installed.",
+      "whenNotToUse": "For a configured editing setup, nvim or helix need much less work.",
+      "gotchas": [
+        "Exit is :q, or :q! to discard changes."
+      ],
       "usages": [
         "vim file.txt                    # Edit file",
         "vim +'set nu' file.txt          # Open with line numbers"
@@ -1422,6 +1899,20 @@
     },
     "helix": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "aliases": [
+        "hx"
+      ],
+      "whenToUse": "A modal editor with LSP and treesitter working out of the box, no plugins to wire up.",
+      "whenNotToUse": "Vim muscle memory does not transfer: helix is selection-first, so the verb comes last.",
+      "gotchas": [
+        "The binary is hx, not helix."
+      ],
       "usages": [
         "hx file.txt                     # Edit file",
         "hx --health                     # Show health"
@@ -1429,9 +1920,6 @@
       "related": [
         "nvim",
         "vim"
-      ],
-      "aliases": [
-        "hx"
       ],
       "capabilities": [
         "editor"
@@ -1452,6 +1940,14 @@
     },
     "just": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Keep a project command list in a justfile and run it by name. Make without the build semantics.",
+      "whenNotToUse": "For actual incremental builds with file dependencies, use make.",
       "usages": [
         "just                            # Run default recipe",
         "just --list                     # List recipes",
@@ -1482,6 +1978,18 @@
     },
     "make": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Run build steps with dependency tracking. Present almost everywhere.",
+      "whenNotToUse": "For a plain list of project commands with no file dependencies, just is far less fiddly.",
+      "gotchas": [
+        "Recipe lines must be indented with a tab. Spaces produce \"missing separator\".",
+        "Not present on Windows by default; install it or use just."
+      ],
       "usages": [
         "make                            # Run default target",
         "make <target>                   # Run a target"
@@ -1509,6 +2017,17 @@
     },
     "watchexec": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Rerun a command whenever files change.",
+      "whenNotToUse": "For a watcher your framework already ships (vite, cargo watch, dotnet watch), use that.",
+      "gotchas": [
+        "Watches the whole working directory, so a build that writes into it can trigger itself. Use --ignore."
+      ],
       "usages": [
         "watchexec <command>             # Rerun on file changes",
         "watchexec -e rs cargo test      # Watch Rust files"
@@ -1532,9 +2051,20 @@
     },
     "hyperfine": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Benchmark commands properly: warmup runs, several samples, and a statistical comparison.",
+      "whenNotToUse": "For a one-off wall-clock number, time or Measure-Command is enough.",
       "usages": [
         "hyperfine <command>             # Benchmark a command",
         "hyperfine -w 3 'cmd a' 'cmd b'  # Compare two commands"
+      ],
+      "related": [
+        "watchexec"
       ],
       "capabilities": [
         "benchmark"
@@ -1552,9 +2082,20 @@
     },
     "tokei": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Count lines of code per language across a tree, fast.",
+      "whenNotToUse": "For a line count of one file, wc -l is already there.",
       "usages": [
         "tokei                           # Count lines of code",
         "tokei -t python                 # Count one language"
+      ],
+      "related": [
+        "rg"
       ],
       "capabilities": [
         "code",
@@ -1572,6 +2113,17 @@
     },
     "sd": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Find and replace across files with plain regex syntax, without sed dialect differences.",
+      "whenNotToUse": "For stream editing beyond substitution, sed still has the full command language.",
+      "gotchas": [
+        "sd rewrites files in place with no backup. Check the diff first, or run under git."
+      ],
       "usages": [
         "sd <find> <replace> file        # Replace in a file",
         "sd -p <find> <replace> file     # Preview replacements"
@@ -1595,9 +2147,20 @@
     },
     "dust": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "See which directories are eating the disk, as a sorted tree.",
+      "whenNotToUse": "For the size of one path in a script, du -sh or Get-ChildItem measure is easier to parse.",
       "usages": [
         "dust                            # Disk usage overview",
         "dust -d 2 <path>                # Depth-limited usage"
+      ],
+      "related": [
+        "du"
       ],
       "capabilities": [
         "disk",
@@ -1615,9 +2178,23 @@
     },
     "zoxide": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Jump to a directory you have visited before by a fragment of its name.",
+      "whenNotToUse": "It only knows directories you have already cd-ed into, so it is useless on a fresh machine.",
+      "gotchas": [
+        "Needs a shell init line (zoxide init) in your profile before z works."
+      ],
       "usages": [
         "zoxide add <path>               # Add a directory",
         "z <query>                       # Jump to a directory"
+      ],
+      "related": [
+        "fzf"
       ],
       "capabilities": [
         "navigation"
@@ -1635,12 +2212,24 @@
     },
     "rclone": {
       "category": "network",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Copy or sync files to and from cloud storage: S3, Google Drive, Dropbox, and dozens more.",
+      "whenNotToUse": "For a plain HTTP download use curl or wget; rclone wants a configured remote.",
+      "gotchas": [
+        "rclone sync deletes files at the destination that are gone from the source. Dry-run with --dry-run first."
+      ],
       "usages": [
         "rclone ls <remote>:             # List remote",
         "rclone copy src dest            # Copy files"
       ],
       "related": [
-        "curl"
+        "curl",
+        "wget"
       ],
       "capabilities": [
         "download",
@@ -1662,9 +2251,23 @@
     },
     "sqlite3": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Query or create a SQLite database file with no server to run.",
+      "whenNotToUse": "For Postgres or MySQL use their own clients; the SQL dialects differ.",
+      "gotchas": [
+        "Without a trailing semicolon the shell waits for more input rather than running your statement."
+      ],
       "usages": [
         "sqlite3 db.sqlite               # Open a database",
         "sqlite3 db.sqlite '.tables'     # List tables"
+      ],
+      "related": [
+        "jq"
       ],
       "capabilities": [
         "sql",
@@ -1683,6 +2286,17 @@
     },
     "pwsh": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "PowerShell 7 or later: cross-platform, and the version cmdpeek itself targets for new work.",
+      "whenNotToUse": "A script that needs Windows-only modules or WinPS 5.1 behaviour should run in powershell.exe.",
+      "gotchas": [
+        "pwsh and powershell are different shells with different module paths and different default encodings."
+      ],
       "usages": [
         "pwsh -NoProfile -File script.ps1  # Run script cleanly",
         "pwsh -Command Get-Date            # Run one command"
@@ -1709,6 +2323,15 @@
     },
     "gsudo": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows"
+      ],
+      "whenToUse": "Run one command elevated on Windows without opening a new admin window.",
+      "whenNotToUse": "Not a POSIX sudo: it elevates, it does not switch users.",
+      "gotchas": [
+        "Still shows a UAC prompt unless cached. gsudo cache on reduces the prompting."
+      ],
       "usages": [
         "gsudo <command>                 # Run elevated",
         "gsudo config CacheMode Auto     # Cache credentials"
@@ -1732,12 +2355,24 @@
     },
     "starship": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "A prompt that shows git state, language versions and exit codes, in any shell.",
+      "whenNotToUse": "It only draws the prompt; it changes nothing about how commands run.",
+      "gotchas": [
+        "Needs an init line in your shell profile, and a Nerd Font for the default glyphs."
+      ],
       "usages": [
         "starship init powershell        # Print profile snippet",
         "starship explain                # Explain prompt modules"
       ],
       "related": [
-        "pwsh"
+        "pwsh",
+        "zoxide"
       ],
       "capabilities": [
         "shell",
@@ -1756,6 +2391,15 @@
     },
     "winget": {
       "category": "system",
+      "origin": "builtin",
+      "os": [
+        "windows"
+      ],
+      "whenToUse": "Install software on Windows from the Microsoft Store and the community repo. Ships with Windows 10 1809+.",
+      "whenNotToUse": "For a per-user developer toolchain scoop updates faster and needs no elevation.",
+      "gotchas": [
+        "Package ids are case sensitive and often vendor-prefixed, as in BurntSushi.ripgrep.MSVC."
+      ],
       "usages": [
         "winget search <name>            # Search packages",
         "winget install <id>             # Install package",
@@ -1780,6 +2424,15 @@
     },
     "scoop": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows"
+      ],
+      "whenToUse": "Install developer CLIs on Windows per user, with no elevation and no installers.",
+      "whenNotToUse": "For system-wide software, drivers or MSIs use choco or winget.",
+      "gotchas": [
+        "Shims live in ~/scoop/shims. A shell opened before the first install will not have it on PATH."
+      ],
       "usages": [
         "scoop search <name>             # Search packages",
         "scoop install <name>            # Install package",
@@ -1803,6 +2456,18 @@
     },
     "choco": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "windows"
+      ],
+      "aliases": [
+        "chocolatey"
+      ],
+      "whenToUse": "Install Windows software machine-wide, including MSI installers and drivers scoop will not touch.",
+      "whenNotToUse": "For a per-user install with no elevation prefer scoop.",
+      "gotchas": [
+        "Install and upgrade need an elevated shell. gsudo choco install works from a normal one."
+      ],
       "usages": [
         "choco search <name>             # Search packages",
         "choco install <name>            # Install package",
@@ -1811,9 +2476,6 @@
       "related": [
         "scoop",
         "winget"
-      ],
-      "aliases": [
-        "chocolatey"
       ],
       "capabilities": [
         "package-manager"
@@ -1829,6 +2491,16 @@
     },
     "brew": {
       "category": "system",
+      "origin": "package",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install CLI tools on macOS, and on Linux when you want newer versions than apt ships.",
+      "whenNotToUse": "On Windows use winget or scoop.",
+      "gotchas": [
+        "Apple Silicon installs under /opt/homebrew, Intel under /usr/local. A shell that predates the install will not see it."
+      ],
       "usages": [
         "brew search <name>              # Search packages",
         "brew install <name>             # Install package",
@@ -1851,6 +2523,18 @@
     },
     "apt": {
       "category": "system",
+      "origin": "builtin",
+      "os": [
+        "linux"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "whenToUse": "Install and query system packages on Debian and Ubuntu.",
+      "whenNotToUse": "Not present on Windows or macOS. Use winget, scoop or brew there.",
+      "gotchas": [
+        "Needs sudo for install and remove. apt is for humans; apt-get is the one to script against."
+      ],
       "usages": [
         "apt search <name>               # Search packages",
         "sudo apt install <name>         # Install package"
@@ -1872,8 +2556,13 @@
     "find": {
       "category": "system",
       "origin": "builtin",
-      "os": ["linux", "macos"],
-      "shell": ["posix"],
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
       "gotchas": [
         "Windows find.exe searches file contents (like findstr), not names. Use Get-ChildItem or fd for names on Windows."
       ],
@@ -1904,8 +2593,13 @@
     "ls": {
       "category": "system",
       "origin": "builtin",
-      "os": ["linux", "macos"],
-      "shell": ["posix"],
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
       "gotchas": [
         "PowerShell ls is Get-ChildItem, not POSIX ls. Flags like -la do not mean the same thing."
       ],
@@ -1928,13 +2622,32 @@
       ],
       "install": {
         "builtin": true
-      }
+      },
+      "related": [
+        "eza",
+        "lsd"
+      ]
     },
     "npm": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "whenToUse": "Install Node dependencies and run package scripts. Ships with node.",
+      "whenNotToUse": "pnpm is faster and uses far less disk for the same lockfile.",
+      "gotchas": [
+        "npm install rewrites package-lock.json. Use npm ci in CI to install exactly the lockfile."
+      ],
       "usages": [
         "npm install                     # Install dependencies",
         "npm run <script>                # Run a package script"
+      ],
+      "related": [
+        "node",
+        "pnpm"
       ],
       "capabilities": [
         "javascript",
@@ -1946,16 +2659,26 @@
       "substitutes": [
         "pnpm",
         "yarn"
-      ],
-      "related": [
-        "node",
-        "pnpm"
       ]
     },
     "python3": {
       "category": "dev-tools",
+      "origin": "package",
+      "os": [
+        "linux",
+        "macos"
+      ],
+      "shell": [
+        "posix"
+      ],
+      "whenToUse": "The Python binary name that actually exists on Linux and macOS.",
+      "whenNotToUse": "On Windows use py or python; python3 there is often a Store stub that only opens the Store.",
       "usages": [
         "python3 script.py               # Run a script"
+      ],
+      "related": [
+        "python",
+        "uv"
       ],
       "capabilities": [
         "python",
@@ -1966,10 +2689,6 @@
       ],
       "substitutes": [
         "python"
-      ],
-      "related": [
-        "python",
-        "uv"
       ]
     }
   },
