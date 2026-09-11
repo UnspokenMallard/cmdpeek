@@ -77,7 +77,8 @@ function Invoke-CmdPeek {
         [int]$ProbeLimit = -1,
         [switch]$Doctor,
         [switch]$Timing,
-        [switch]$Version
+        [switch]$Version,
+        [switch]$IncludeUndocumented
     )
 
     if ($ProbeLimit -lt 0) { $ProbeLimit = 25 }
@@ -192,9 +193,15 @@ function Invoke-CmdPeek {
         return
     }
 
-    # Only the unfiltered inventory is cacheable. A -Search/-Category/-Count run produces a
-    # subset, and writing that to the cache would hand the next caller a partial machine.
-    $fullInventoryJson = $Json -and -not $Gaps -and -not $HumanGaps -and -not $Search -and -not $Category
+    # Only the unfiltered inventory is cacheable. Every other -Json caller wants its own
+    # payload, and a -Search/-Category/-Count run produces a subset, which would hand the
+    # next caller a partial machine if it were written to the cache.
+    # -Rusty -Json is deliberately absent: it emits the same full snapshot as plain -Json,
+    # with the rusty rows already inside it.
+    $jsonSubcommand = [bool]$Gaps -or [bool]$HumanGaps -or [bool]$Recent -or [bool]$LastInstall -or
+        [bool]$Task -or [bool]$Why -or [bool]$Explain -or [bool]$SearchAvailable -or
+        [bool]$Have -or [bool]$AgentExport -or [bool]$Compare -or [bool]$Suggest
+    $fullInventoryJson = $Json -and -not $jsonSubcommand -and -not $Search -and -not $Category
 
     # Served before the scan, not after: the package managers and bin directories are the
     # expensive part, so a cache checked further down would save nothing.
@@ -395,7 +402,8 @@ function Invoke-CmdPeek {
     }
 
     if ($AgentExport) {
-        $markdown = Format-CmdPeekAgentExport -History $history -Catalog $catalog -Favorite @($state.Favorites)
+        $markdown = Format-CmdPeekAgentExport -History $history -Catalog $catalog `
+            -Favorite @($state.Favorites) -IncludeUndocumented:$IncludeUndocumented
         if ($AgentExportPath) {
             $parent = Split-Path -Parent $AgentExportPath
             if ($parent -and -not (Test-Path -LiteralPath $parent)) {
