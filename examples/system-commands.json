@@ -673,7 +673,9 @@
       ],
       "whenToUse": "Print the machine name.",
       "whenNotToUse": "Does not show FQDN everywhere; uname -n is the POSIX sibling.",
-      "gotchas": [],
+      "gotchas": [
+        "Windows hostname.exe takes no arguments; it cannot set the name. Use Rename-Computer."
+      ],
       "usages": [
         "hostname                          # Computer name"
       ],
@@ -948,7 +950,9 @@
       ],
       "whenToUse": "Find PIDs by name on POSIX.",
       "whenNotToUse": "On Windows use tasklist /FI.",
-      "gotchas": [],
+      "gotchas": [
+        "Matches against the process name only by default, so a python script shows up as python. Use -f to match the full command line."
+      ],
       "usages": [
         "pgrep -a ssh                      # PIDs and args matching ssh"
       ],
@@ -1053,7 +1057,9 @@
       ],
       "whenToUse": "Filesystem capacity on POSIX.",
       "whenNotToUse": "On Windows use Get-PSDrive or wmic logicaldisk.",
-      "gotchas": [],
+      "gotchas": [
+        "Sizes are in 1K blocks unless you pass -h. Network mounts can hang the whole listing."
+      ],
       "usages": [
         "df -h                             # Human-readable disk use"
       ],
@@ -1085,7 +1091,9 @@
       ],
       "whenToUse": "Measure a POSIX tree. dust is nicer when installed.",
       "whenNotToUse": "On Windows use robocopy /L or Get-ChildItem measure.",
-      "gotchas": [],
+      "gotchas": [
+        "Reports disk usage, not apparent size, so sparse files and compressed filesystems read low. Use --apparent-size for file bytes."
+      ],
       "usages": [
         "du -sh *                          # Size of each entry"
       ],
@@ -1340,7 +1348,9 @@
       ],
       "whenToUse": "First N lines of a POSIX file.",
       "whenNotToUse": "In PowerShell use Get-Content -TotalCount.",
-      "gotchas": [],
+      "gotchas": [
+        "Reading the head of a growing file gives you a snapshot, not a follow. Use tail -f for that."
+      ],
       "usages": [
         "head -n 20 file.txt               # First 20 lines"
       ],
@@ -1375,7 +1385,9 @@
       ],
       "whenToUse": "Last lines or follow a POSIX log.",
       "whenNotToUse": "Get-Content -Tail / -Wait in PowerShell.",
-      "gotchas": [],
+      "gotchas": [
+        "tail -f stops following a file that gets rotated. Use tail -F to reopen it by name."
+      ],
       "usages": [
         "tail -n 50 file.txt               # Last 50 lines",
         "tail -f logfile                   # Follow a log"
@@ -1447,7 +1459,10 @@
       ],
       "whenToUse": "Kernel and machine identity on POSIX.",
       "whenNotToUse": "On Windows use systeminfo or [Environment]::OSVersion.",
-      "gotchas": [],
+      "gotchas": [
+        "Not present in Windows PowerShell. Use $PSVersionTable and [Environment]::OSVersion.",
+        "uname -m reports the kernel architecture, which on Apple Silicon under Rosetta is not the process architecture."
+      ],
       "usages": [
         "uname -a                          # Kernel and arch"
       ],
@@ -1481,7 +1496,10 @@
       ],
       "whenToUse": "Print or run with a modified POSIX environment.",
       "whenNotToUse": "PowerShell uses $env:NAME. cmd uses set.",
-      "gotchas": [],
+      "gotchas": [
+        "env with no arguments prints the environment; env VAR=value cmd sets it for one command only.",
+        "In PowerShell the equivalent is $env:VAR, and Windows has no env.exe."
+      ],
       "usages": [
         "env                               # Print environment",
         "env FOO=bar command               # Run with FOO set"
@@ -1549,7 +1567,10 @@
       ],
       "whenToUse": "Read the systemd journal.",
       "whenNotToUse": "On Windows use Get-WinEvent / Event Viewer.",
-      "gotchas": [],
+      "gotchas": [
+        "Reads only systemd journals, so it is empty on a container or a distro without systemd.",
+        "Needs membership of systemd-journal, or sudo, to see other users’ logs."
+      ],
       "usages": [
         "journalctl -u ssh -e              # SSH unit, jump to end",
         "journalctl -f                     # Follow"
