@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     cmdpeek — recently installed commands and how to use them.
@@ -30,6 +30,10 @@ param(
     [string]$Category,
 
     [switch]$NonInteractive,
+
+    [string]$DataDirectory,
+
+    [string]$ExamplesPath,
 
     [string]$Reinstall,
 
@@ -92,6 +96,8 @@ param(
 
     [string]$Suggest,
 
+    [switch]$IncludeUndocumented,
+
     [switch]$Doctor,
 
     [switch]$Timing,
@@ -122,6 +128,7 @@ Usage:
   cmdpeek have [cap]      Installed catalog tools you can use
   cmdpeek agent-export    Markdown playbook of installed tools for agents
   cmdpeek agent-export FILE   Write that playbook to FILE
+  cmdpeek agent-export -IncludeUndocumented   Add PATH commands with no usages
   cmdpeek gaps            Human-readable inventory gaps (ranked, capped, no thin-docs)
   cmdpeek gaps -GapKind thin-docs -GapLimit 0    One gap kind, uncapped
   cmdpeek rusty           Installed tools missing from recent history
@@ -162,6 +169,14 @@ Import-Module $moduleManifest -Force
 $invoke = @{}
 $rest = ''
 if ($Remaining) {
+    # ValueFromRemainingArguments swallows anything it does not recognise, so a typo like
+    # -Jsonn or a flag this script does not declare would silently become the search term
+    # or the agent-export filename. Say so instead.
+    $stray = @(@($Remaining) | Where-Object { $_ -and $_.Length -gt 1 -and $_.StartsWith('-') })
+    if ($stray.Count -gt 0) {
+        [Console]::Error.WriteLine("cmdpeek: unknown option $($stray -join ', '). Run 'cmdpeek --help' for the list.")
+        exit 2
+    }
     $rest = (@($Remaining) -join ' ').Trim()
 }
 
@@ -226,6 +241,8 @@ elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-'
 }
 if ($Category) { $invoke.Category = $Category }
 if ($NonInteractive) { $invoke.NonInteractive = $true }
+if ($DataDirectory) { $invoke.DataDirectory = $DataDirectory }
+if ($ExamplesPath) { $invoke.ExamplesPath = $ExamplesPath }
 if ($Reinstall) { $invoke.Reinstall = $Reinstall }
 if ($Manager) { $invoke.Manager = $Manager }
 if ($Export) { $invoke.Export = $Export }
@@ -255,6 +272,7 @@ if ($AgentExport) { $invoke.AgentExport = $true }
 if ($AgentExportPath) { $invoke.AgentExportPath = $AgentExportPath }
 if ($Compare) { $invoke.Compare = $Compare }
 if ($Suggest) { $invoke.Suggest = $Suggest }
+if ($IncludeUndocumented) { $invoke.IncludeUndocumented = $true }
 if ($Doctor) { $invoke.Doctor = $true }
 if ($Timing) { $invoke.Timing = $true }
 if ($Version) { $invoke.Version = $true }

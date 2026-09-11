@@ -304,7 +304,7 @@ function Get-CmdPeekWhyCommand {
     $entry = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
     $installedSet = Get-CmdPeekInstalledNameSet -History $History -Catalog $Catalog
     $installed = Test-CmdPeekNameCovered -Name $Command -InstalledSet $installedSet -Catalog $Catalog
-    $matches = @(
+    $matched = @(
         @($History) | Where-Object {
             $_ -and $_.Command -and (
                 $_.Command.ToLowerInvariant() -eq $Command.ToLowerInvariant() -or
@@ -317,8 +317,8 @@ function Get-CmdPeekWhyCommand {
     if ($CommandTester -and $Command) {
         try { $onPath = [bool](& $CommandTester $Command) } catch { $onPath = $false }
     }
-    if ($matches.Count -gt 0) {
-        foreach ($row in $matches) {
+    if ($matched.Count -gt 0) {
+        foreach ($row in $matched) {
             $name = [string]$row.Command
             $ok = $false
             if ($CommandTester) {
@@ -334,7 +334,7 @@ function Get-CmdPeekWhyCommand {
             }
         }
         if (-not $onPathManager) {
-            $onPathManager = [string]$matches[0].PackageManager
+            $onPathManager = [string]$matched[0].PackageManager
         }
     }
 
@@ -355,7 +355,7 @@ function Get-CmdPeekWhyCommand {
         installed       = [bool]$installed
         onPath          = [bool]$onPath
         onPathManager   = $onPathManager
-        packageManagers = @($matches | ForEach-Object { [string]$_.PackageManager } | Select-Object -Unique)
+        packageManagers = @($matched | ForEach-Object { [string]$_.PackageManager } | Select-Object -Unique)
         category        = $(if ($entry -and $entry.PSObject.Properties['category']) { [string]$entry.category } else { 'other' })
         capabilities    = @(Get-CmdPeekCatalogCapabilityList -Entry $entry)
         aliases         = @(Get-CmdPeekCatalogAliasList -Entry $entry)
@@ -371,7 +371,7 @@ function Get-CmdPeekWhyCommand {
         collisions      = @(Get-CmdPeekNameCollision -Command $(if ($canonical) { $canonical } else { $Command }))
         appliesToOs     = [bool](Test-CmdPeekCatalogAppliesToOs -Entry $entry)
         installCommands = @(Get-CmdPeekInstallCommands -Command $(if ($canonical) { $canonical } else { $Command }) -Catalog $Catalog -PreferredManager $PreferredManager)
-        rows            = @($matches)
+        rows            = @($matched)
     }
 }
 
@@ -440,7 +440,6 @@ function Search-CmdPeekAvailable {
     )
 
     if (-not $Catalog) { $Catalog = @{} }
-    $installedSet = Get-CmdPeekInstalledNameSet -History $History -Catalog $Catalog
     $resolved = Resolve-CmdPeekTask -Task $Query -History $History -Catalog $Catalog -Limit $Limit -PreferredManager $PreferredManager
     $catalogHits = @($resolved.missing)
 

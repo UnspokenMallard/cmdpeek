@@ -53,3 +53,45 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  analyzer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+      - name: Analyze
+        shell: pwsh
+        run: |
+          Import-Module PSScriptAnalyzer
+          $findings = @(
+            foreach ($target in @('./src', './scripts', './install.ps1')) {
+              Invoke-ScriptAnalyzer -Path $target -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+            }
+          )
+          foreach ($f in $findings) {
+            "::warning file=$($f.ScriptPath),line=$($f.Line)::[$($f.RuleName)] $($f.Message)"
+          }
+          if ($findings.Count -gt 0) {
+            Write-Host "$($findings.Count) PSScriptAnalyzer finding(s)."
+            exit 1
+          }
+          Write-Host 'PSScriptAnalyzer is clean.'
+
+  # The Pester suites all run against fixture roots. This is the only job that points
+  # cmdpeek at a real machine, which is where the payload and timeout regressions live.
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test against this runner
+        shell: pwsh
+        run: ./scripts/Invoke-CmdPeekSmoke.ps1 -TimeoutSeconds 300
+

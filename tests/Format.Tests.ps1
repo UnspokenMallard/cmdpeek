@@ -174,4 +174,51 @@ Describe 'Format-CmdPeekAgentExport' {
         $text | Should -Match 'pretty-print'
         $text | Should -Not -Match 'secret'
     }
+
+    It 'leaves out PATH commands that have nothing to teach, and counts them' {
+        $catalog = @{
+            'jq' = [pscustomobject]@{ category = 'dev-tools'; usages = @('jq . file.json') }
+        }
+        $history = @(
+            [pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop'; Usages = @('jq . file.json') }
+            [pscustomobject]@{ Command = '['; PackageManager = 'apt'; Usages = @() }
+            [pscustomobject]@{ Command = 'addgnupghome'; PackageManager = 'apt'; Usages = @() }
+        )
+
+        $text = Format-CmdPeekAgentExport -History $history -Catalog $catalog
+
+        $text | Should -Match '### jq'
+        $text | Should -Not -Match 'addgnupghome'
+        $text | Should -Match '2 more commands are on PATH with no usage examples'
+    }
+
+    It 'keeps an undocumented command when it is a favorite' {
+        $history = @([pscustomobject]@{ Command = 'widgetcli'; PackageManager = 'cargo'; Usages = @() })
+
+        $text = Format-CmdPeekAgentExport -History $history -Catalog @{} -Favorite @('widgetcli')
+
+        $text | Should -Match '### widgetcli \(cargo\) \*'
+    }
+
+    It 'keeps an undocumented command when the catalog knows the name' {
+        $catalog = @{ 'widgetcli' = [pscustomobject]@{ category = 'dev-tools'; substitutes = @('gadgetcli') } }
+        $history = @([pscustomobject]@{ Command = 'widgetcli'; PackageManager = 'cargo'; Usages = @() })
+
+        $text = Format-CmdPeekAgentExport -History $history -Catalog $catalog
+
+        $text | Should -Match '### widgetcli'
+        $text | Should -Match 'covers: gadgetcli'
+    }
+
+    It 'includes everything when -IncludeUndocumented is passed' {
+        $history = @(
+            [pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop'; Usages = @('jq . file.json') }
+            [pscustomobject]@{ Command = 'addgnupghome'; PackageManager = 'apt'; Usages = @() }
+        )
+
+        $text = Format-CmdPeekAgentExport -History $history -Catalog @{} -IncludeUndocumented
+
+        $text | Should -Match 'addgnupghome'
+        $text | Should -Not -Match 'more commands are on PATH'
+    }
 }

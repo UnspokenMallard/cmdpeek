@@ -347,7 +347,8 @@ function Format-CmdPeekAgentExport {
         [AllowEmptyCollection()]
         [object[]]$History,
         [hashtable]$Catalog,
-        [string[]]$Favorite
+        [string[]]$Favorite,
+        [switch]$IncludeUndocumented
     )
 
     if (-not $Catalog) { $Catalog = @{} }
@@ -358,6 +359,7 @@ function Format-CmdPeekAgentExport {
 
     $rows = New-Object System.Collections.Generic.List[object]
     $seen = @{}
+    $skipped = 0
     foreach ($row in @($History)) {
         if (-not $row -or -not $row.Command) { continue }
         if ($row.PSObject.Properties['Hidden'] -and $row.Hidden) { continue }
@@ -373,6 +375,13 @@ function Format-CmdPeekAgentExport {
             $usages = @(Get-CmdPeekCatalogUsageList -Entry $entry | Select-Object -First 2)
         }
         $star = $favSet.ContainsKey($key)
+        # A playbook entry with no usages and no catalog knowledge teaches an agent
+        # nothing, and a populated /usr/bin contributes over a thousand of them. Keep
+        # the rows that carry something to say.
+        if (-not $IncludeUndocumented -and -not $star -and $usages.Count -eq 0 -and -not $entry) {
+            $skipped++
+            continue
+        }
         $rows.Add([pscustomobject]@{
             Command        = [string]$row.Command
             PackageManager = [string]$row.PackageManager
@@ -411,6 +420,9 @@ function Format-CmdPeekAgentExport {
             $lines.Add(('- `{0}`' -f $u))
         }
         $lines.Add('')
+    }
+    if ($skipped -gt 0) {
+        $lines.Add(('{0} more commands are on PATH with no usage examples. See `cmdpeek -Json` for the full inventory.' -f $skipped))
     }
     return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 }

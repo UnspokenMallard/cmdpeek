@@ -58,7 +58,6 @@ if (Test-Path -LiteralPath $examples) {
     Copy-Item -Path (Join-Path $examples '*') -Destination $exampleDest -Force
 }
 
-$entry = Join-Path $moduleDest 'cmdpeek.ps1'
 $shim = Join-Path $binDest 'cmdpeek.cmd'
 @(
     '@echo off'
@@ -88,7 +87,9 @@ foreach ($modPath in @($ps7Modules, $ps5Modules)) {
     }
 }
 
-if (-not $SkipPath) {
+# The user PATH is updated by default. -AddToPath is accepted so the intent can be
+# stated explicitly, and it wins if both switches are somehow passed.
+if ($AddToPath -or -not $SkipPath) {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (-not $userPath) { $userPath = '' }
     $parts = @($userPath -split ';' | Where-Object { $_ })
