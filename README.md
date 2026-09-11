@@ -319,6 +319,8 @@ Beyond `usages`, each entry carries the fields an agent needs to *choose* a tool
 | `substitutes` / `related` | What it replaces, and what pairs with it |
 | `capabilities` / `tasks` | How `for` and `have` find it |
 
+A name with no catalog entry is not assumed to be a package. If it resolves only as a shell alias, function, or cmdlet, cmdpeek reports `origin: builtin` and offers no install line, because `scoop install cd` is not a thing. A name that resolves to an executable, or to nothing, still gets a best-guess install line so `explain` stays useful for packages the catalog has not learned yet.
+
 `cmdpeek catalog-lint` validates both files against `examples/usage-examples.schema.json`, checks that every `related`, `substitutes`, and kit member resolves in the merged catalog, and reports per-field coverage. It exits 1 on any error, so it can gate a build, and it runs on every push:
 
 ```

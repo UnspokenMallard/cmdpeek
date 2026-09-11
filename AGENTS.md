@@ -19,8 +19,9 @@ Prefer MCP tools when the cmdpeek server is configured. Otherwise run the same i
 4. Explain a binary with `explain_command` / `get_command` (CLI: `cmdpeek explain fd` or `cmdpeek fd`). Catalog-only names are allowed. Read `gotchas` and `collisions` (PowerShell `curl`/`sc`/`find`/`where`).
 5. Map a hallucinated argv with `suggest_for_argv` (CLI: `cmdpeek suggest "ps aux"`). Compare two tools with `compare_commands` (CLI: `cmdpeek compare robocopy Copy-Item`).
 6. For a durable per-machine cheat sheet: `cmdpeek agent-export` (MCP: `export_agent_playbook` / `cmdpeek://agent-export`). System builtins: `cmdpeek://system`.
-7. Never execute usage lines that contain `<placeholders>` or `usageDetails.unsafe=true`. Never scoop-install `origin=builtin` commands.
-8. If cmdpeek itself misbehaves, ask it: `diagnose` (CLI: `cmdpeek doctor`, `cmdpeek doctor -Timing`). It reports versions, detected managers, catalog health, cache ages, and a `problems` list.
+7. Never execute usage lines that contain `<placeholders>` or `usageDetails.unsafe=true`. Never scoop-install `origin=builtin` commands — that now includes shell aliases, functions, and cmdlets the catalog has never heard of, which report `origin=builtin` and carry no `installCommands`.
+8. An `installCommands` line for a name with no catalog entry is a guess assembled from the name. Treat it as a suggestion to verify, not a fact.
+9. If cmdpeek itself misbehaves, ask it: `diagnose` (CLI: `cmdpeek doctor`, `cmdpeek doctor -Timing`). It reports versions, detected managers, catalog health, cache ages, and a `problems` list.
 
 ## Reading a capped answer
 
