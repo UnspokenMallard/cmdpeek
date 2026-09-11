@@ -13,6 +13,7 @@ $script:CmdPeekModuleRoot = $PSScriptRoot
 . (Join-Path $PSScriptRoot 'TaskResolve.ps1')
 . (Join-Path $PSScriptRoot 'InteractiveMode.ps1')
 . (Join-Path $PSScriptRoot 'Inventory.ps1')
+. (Join-Path $PSScriptRoot 'Doctor.ps1')
 . (Join-Path $PSScriptRoot 'Tui.ps1')
 
 function Invoke-CmdPeek {
@@ -73,7 +74,10 @@ function Invoke-CmdPeek {
         [string[]]$GapKind,
         [int]$GapLimit = -1,
         [int]$TaskLimit = 0,
-        [int]$ProbeLimit = -1
+        [int]$ProbeLimit = -1,
+        [switch]$Doctor,
+        [switch]$Timing,
+        [switch]$Version
     )
 
     if ($ProbeLimit -lt 0) { $ProbeLimit = 25 }
@@ -99,6 +103,7 @@ function Invoke-CmdPeek {
     if ($NonInteractive) { $useInteractive = $false }
     if ($Rusty -and -not $Interactive) { $useInteractive = $false }
     if ($Task -or $Why -or $Explain -or $SearchAvailable -or $Have -or $HumanGaps -or $AgentExport -or $Compare -or $Suggest) { $useInteractive = $false }
+    if ($Doctor -or $Version) { $useInteractive = $false }
 
     # Grouped recency: -Recent, or quick view with -n / default NonInteractive peek.
     # -Search/-Category without -Count stay flat and must not use this path.
@@ -107,6 +112,37 @@ function Invoke-CmdPeek {
             $Count -gt 0 -or (-not $Search -and -not $Category)
         )
     )
+
+    if ($Version) {
+        $ver = Get-CmdPeekVersion
+        if ($Json) {
+            Write-Output ($ver | ConvertTo-Json -Depth 4)
+        }
+        else {
+            $mcpVer = $ver.mcp
+            if (-not $mcpVer) { $mcpVer = 'not found' }
+            Write-Output "cmdpeek $($ver.module) (mcp $mcpVer, PowerShell $($ver.powerShell), $($ver.os))"
+            if (-not $ver.inSync) {
+                Write-Output "warning: mcp/package.json is $($ver.mcp), which does not match the module"
+            }
+        }
+        return
+    }
+
+    if ($Doctor) {
+        $doctorArgs = @{ DataDirectory = $DataDirectory; Timing = $Timing }
+        if ($ExamplesPath) { $doctorArgs.ExamplesPath = $ExamplesPath }
+        if ($CommandTester) { $doctorArgs.CommandTester = $CommandTester }
+        if ($PSBoundParameters.ContainsKey('HistoryPath')) { $doctorArgs.HistoryPath = $HistoryPath }
+        $report = Get-CmdPeekDoctorReport @doctorArgs
+        if ($Json) {
+            Write-Output ($report | ConvertTo-Json -Depth 8)
+        }
+        else {
+            Write-Output (Format-CmdPeekDoctorReport -Report $report)
+        }
+        return
+    }
 
     # Validate -Since before scan/save so bogus values never advance LastPeekAt
     if ($isRecencyPath) {
@@ -748,4 +784,14 @@ Export-ModuleMember -Function @(
     'Test-CmdPeekCatalogIsBuiltin'
     'Get-CmdPeekCurrentOs'
     'Save-CmdPeekLearnedCatalogEntry'
+    'Get-CmdPeekVersion'
+    'Get-CmdPeekModuleVersion'
+    'Get-CmdPeekMcpVersion'
+    'Get-CmdPeekDoctorReport'
+    'Format-CmdPeekDoctorReport'
+    'Measure-CmdPeekScanStage'
+    'Get-CmdPeekInventoryCache'
+    'Save-CmdPeekInventoryCache'
+    'Get-CmdPeekInventoryCachePath'
+    'Get-CmdPeekInventoryCacheSeconds'
 )

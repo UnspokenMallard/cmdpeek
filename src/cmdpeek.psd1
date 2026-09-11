@@ -74,6 +74,16 @@
         'Test-CmdPeekCatalogIsBuiltin'
         'Get-CmdPeekCurrentOs'
         'Save-CmdPeekLearnedCatalogEntry'
+        'Get-CmdPeekVersion'
+        'Get-CmdPeekModuleVersion'
+        'Get-CmdPeekMcpVersion'
+        'Get-CmdPeekDoctorReport'
+        'Format-CmdPeekDoctorReport'
+        'Measure-CmdPeekScanStage'
+        'Get-CmdPeekInventoryCache'
+        'Save-CmdPeekInventoryCache'
+        'Get-CmdPeekInventoryCachePath'
+        'Get-CmdPeekInventoryCacheSeconds'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
