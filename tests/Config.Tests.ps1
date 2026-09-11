@@ -168,3 +168,103 @@ Describe 'Set-CmdPeekPreferredPackageManager' {
         $state.PreferredPackageManager | Should -Be 'pipx'
     }
 }
+
+Describe 'inventory cache TTL' {
+    BeforeEach {
+        Remove-Item Env:\CMDPEEK_INVENTORY_CACHE_SECONDS -ErrorAction SilentlyContinue
+    }
+    AfterAll {
+        Remove-Item Env:\CMDPEEK_INVENTORY_CACHE_SECONDS -ErrorAction SilentlyContinue
+    }
+
+    It 'defaults to 120 seconds' {
+        $data = Join-Path $TestDrive 'ttl-default'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        Get-CmdPeekInventoryCacheSeconds -DataDirectory $data | Should -Be 120
+    }
+
+    It 'reads InventoryCacheSeconds from state' {
+        $data = Join-Path $TestDrive 'ttl-state'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        $state = Get-CmdPeekDefaultState
+        $state.InventoryCacheSeconds = 900
+        Save-CmdPeekState -State $state -DataDirectory $data
+        Get-CmdPeekInventoryCacheSeconds -DataDirectory $data | Should -Be 900
+    }
+
+    It 'lets the environment override state' {
+        $data = Join-Path $TestDrive 'ttl-env'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        $state = Get-CmdPeekDefaultState
+        $state.InventoryCacheSeconds = 900
+        Save-CmdPeekState -State $state -DataDirectory $data
+        $env:CMDPEEK_INVENTORY_CACHE_SECONDS = '5'
+        Get-CmdPeekInventoryCacheSeconds -DataDirectory $data | Should -Be 5
+    }
+
+    It 'treats zero as cache disabled' {
+        $data = Join-Path $TestDrive 'ttl-zero'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        Save-CmdPeekInventoryCache -Snapshot ([pscustomobject]@{ commands = @() }) -DataDirectory $data
+        Get-CmdPeekInventoryCache -DataDirectory $data | Should -Not -BeNullOrEmpty
+        $env:CMDPEEK_INVENTORY_CACHE_SECONDS = '0'
+        Get-CmdPeekInventoryCache -DataDirectory $data | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'ConvertTo-CmdPeekState' {
+    It 'coerces an arbitrary document onto the known schema' {
+        $raw = [pscustomobject]@{
+            Favorites   = @('jq', '', 'fd')
+            Nonsense    = 'ignored'
+            LastScan    = '2026-03-02T14:11:00Z'
+            Commands    = @(
+                [pscustomobject]@{ Command = 'jq'; PackageManager = 'scoop' }
+                [pscustomobject]@{ PackageManager = 'scoop' }
+            )
+        }
+        $state = ConvertTo-CmdPeekState -Raw $raw
+        $state.SchemaVersion | Should -Be 1
+        @($state.Favorites) | Should -Be @('jq', 'fd')
+        $state.PSObject.Properties['Nonsense'] | Should -BeNullOrEmpty
+        $state.LastScan | Should -Match '^2026-03-02T14:11:00'
+        @($state.Commands).Count | Should -Be 1
+        @($state.Commands)[0].PackageName | Should -Be 'jq'
+    }
+
+    It 'rejects a preferred manager cmdpeek cannot drive' {
+        $state = ConvertTo-CmdPeekState -Raw ([pscustomobject]@{ PreferredPackageManager = 'yum' })
+        $state.PreferredPackageManager | Should -BeNullOrEmpty
+    }
+
+    It 'accepts apt and pacman as a preferred manager' {
+        $state = ConvertTo-CmdPeekState -Raw ([pscustomobject]@{ PreferredPackageManager = 'apt' })
+        $state.PreferredPackageManager | Should -Be 'apt'
+    }
+
+    It 'refuses a state file from a newer schema' {
+        { ConvertTo-CmdPeekState -Raw ([pscustomobject]@{ SchemaVersion = 99 }) } |
+            Should -Throw -ExpectedMessage '*schema version 99*'
+    }
+
+    It 'imports a hand-edited backup without corrupting state' {
+        $data = Join-Path $TestDrive 'import-dirty'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        $backup = Join-Path $TestDrive 'dirty.json'
+        '{ "Favorites": ["jq"], "CacheTtlHours": "not-a-number", "Extra": 1 }' |
+            Set-Content -LiteralPath $backup -Encoding UTF8
+        Import-CmdPeekState -Path $backup -DataDirectory $data
+        $state = Get-CmdPeekState -DataDirectory $data
+        @($state.Favorites) | Should -Be @('jq')
+        $state.CacheTtlHours | Should -Be 24
+    }
+
+    It 'rejects a backup that is not JSON' {
+        $data = Join-Path $TestDrive 'import-bad'
+        New-Item -ItemType Directory -Force -Path $data | Out-Null
+        $backup = Join-Path $TestDrive 'bad.json'
+        'not json at all {' | Set-Content -LiteralPath $backup -Encoding UTF8
+        { Import-CmdPeekState -Path $backup -DataDirectory $data } |
+            Should -Throw -ExpectedMessage '*not valid JSON*'
+    }
+}

@@ -7,13 +7,21 @@ function Get-CmdPeekPsReadLineHistoryPath {
     [CmdletBinding()]
     param()
 
-    $paths = @(
-        (Join-Path $env:APPDATA 'Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt')
-        (Join-Path $env:APPDATA 'Microsoft\PowerShell\PSReadLine\ConsoleHost_history.txt')
-    )
+    $paths = New-Object System.Collections.Generic.List[string]
+    if ($env:APPDATA) {
+        $paths.Add((Join-Path $env:APPDATA 'Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt'))
+        $paths.Add((Join-Path $env:APPDATA 'Microsoft\PowerShell\PSReadLine\ConsoleHost_history.txt'))
+    }
+    # PowerShell 7 on Linux and macOS keeps history under the XDG data directory.
+    $xdg = $env:XDG_DATA_HOME
+    if (-not $xdg -and $HOME) { $xdg = Join-Path $HOME '.local/share' }
+    if ($xdg) {
+        $paths.Add((Join-Path $xdg 'powershell/PSReadLine/ConsoleHost_history.txt'))
+    }
+
     $found = New-Object System.Collections.Generic.List[string]
-    foreach ($p in $paths) {
-        if ($p -and (Test-Path -LiteralPath $p)) { $found.Add($p) }
+    foreach ($p in @($paths.ToArray())) {
+        if ($p -and (Test-Path -LiteralPath $p) -and $found -notcontains $p) { $found.Add($p) }
     }
     return @($found.ToArray())
 }

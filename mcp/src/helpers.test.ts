@@ -11,6 +11,7 @@ import {
   rankGap,
   cap,
   summarizeSnapshot,
+  installCommandFor,
 } from "./helpers.js";
 
 test("filterGaps keeps one kind", () => {
@@ -134,4 +135,13 @@ test("summarizeSnapshot replaces the full scan with counts", () => {
   assert.deepEqual(summary.managersMissing, ["scoop"]);
   assert.deepEqual(summary.gapSummary, { total: 1230 });
   assert.equal("commands" in summary, false);
+});
+
+test("installCommandFor covers every manager cmdpeek can drive", () => {
+  assert.equal(installCommandFor("scoop", "jq"), "scoop install jq");
+  assert.equal(installCommandFor("chocolatey", "jq"), "choco install jq -y");
+  assert.equal(installCommandFor("apt", "jq"), "sudo apt install -y jq");
+  assert.equal(installCommandFor("pacman", "jq"), "sudo pacman -S --noconfirm jq");
+  assert.equal(installCommandFor("brew", "jq"), "brew install jq");
+  assert.equal(installCommandFor("unknown", "jq"), "scoop install jq");
 });

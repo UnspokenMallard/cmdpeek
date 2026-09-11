@@ -400,21 +400,11 @@ function Get-CmdPeekCanonicalCommand {
     )
 
     if (-not $Command) { return $Command }
-    $entryHit = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
-    if (-not $entryHit) { return $Command }
-    foreach ($key in @($Catalog.Keys)) {
-        if ($key.ToLowerInvariant() -eq $Command.ToLowerInvariant()) {
-            return [string]$key
-        }
-    }
-    foreach ($key in @($Catalog.Keys)) {
-        $entry = $Catalog[$key]
-        $aliases = @(Get-CmdPeekCatalogAliasList -Entry $entry)
-        foreach ($alias in $aliases) {
-            if ($alias.ToLowerInvariant() -eq $Command.ToLowerInvariant()) {
-                return [string]$key
-            }
-        }
+    if (-not $Catalog) { return $Command }
+    $lookup = Get-CmdPeekCatalogLookup -Catalog $Catalog
+    $needle = $Command.ToLowerInvariant()
+    if ($lookup -and $lookup.Canonical.ContainsKey($needle)) {
+        return [string]$lookup.Canonical[$needle]
     }
     return $Command
 }
@@ -460,6 +450,58 @@ function Get-CmdPeekInstalledNameSet {
     return $set
 }
 
+$script:CmdPeekCoverageCache = New-Object System.Collections.Generic.List[object]
+$script:CmdPeekCoverageCacheMax = 4
+
+function Clear-CmdPeekSubstituteCoverage {
+    [CmdletBinding()]
+    param()
+    $script:CmdPeekCoverageCache = New-Object System.Collections.Generic.List[object]
+}
+
+function Get-CmdPeekSubstituteCoverage {
+    [CmdletBinding()]
+    param(
+        [hashtable]$InstalledSet,
+        [hashtable]$Catalog
+    )
+
+    if (-not $InstalledSet -or -not $Catalog) { return @{} }
+
+    # "Which names does something installed already substitute for?" only depends on
+    # the catalog and the installed set, but it used to be recomputed per lookup.
+    foreach ($slot in $script:CmdPeekCoverageCache) {
+        if ([object]::ReferenceEquals($slot.Catalog, $Catalog) -and
+            [object]::ReferenceEquals($slot.InstalledSet, $InstalledSet) -and
+            $slot.InstalledCount -eq $InstalledSet.Count) {
+            return $slot.Coverage
+        }
+    }
+
+    $coverage = @{}
+    foreach ($key in @($Catalog.Keys)) {
+        if (-not $InstalledSet.ContainsKey(([string]$key).ToLowerInvariant())) { continue }
+        foreach ($sub in @(Get-CmdPeekCatalogSubstituteList -Entry $Catalog[$key])) {
+            if (-not $sub) { continue }
+            $coverage[([string]$sub).ToLowerInvariant()] = $true
+            foreach ($alias in @(Get-CmdPeekCommandNamesFor -Command $sub -Catalog $Catalog)) {
+                if ($alias) { $coverage[([string]$alias).ToLowerInvariant()] = $true }
+            }
+        }
+    }
+
+    $script:CmdPeekCoverageCache.Add([pscustomobject]@{
+        Catalog        = $Catalog
+        InstalledSet   = $InstalledSet
+        InstalledCount = $InstalledSet.Count
+        Coverage       = $coverage
+    })
+    while ($script:CmdPeekCoverageCache.Count -gt $script:CmdPeekCoverageCacheMax) {
+        $script:CmdPeekCoverageCache.RemoveAt(0)
+    }
+    return $coverage
+}
+
 function Test-CmdPeekNameCovered {
     [CmdletBinding()]
     param(
@@ -481,16 +523,8 @@ function Test-CmdPeekNameCovered {
     }
 
     if ($Catalog) {
-        foreach ($key in @($Catalog.Keys)) {
-            if (-not $InstalledSet.ContainsKey($key.ToLowerInvariant())) { continue }
-            $subs = @(Get-CmdPeekCatalogSubstituteList -Entry $Catalog[$key])
-            foreach ($sub in $subs) {
-                if ($sub.ToLowerInvariant() -eq $Name.ToLowerInvariant()) { return $true }
-                foreach ($alias in @(Get-CmdPeekCommandNamesFor -Command $sub -Catalog $Catalog)) {
-                    if ($alias.ToLowerInvariant() -eq $Name.ToLowerInvariant()) { return $true }
-                }
-            }
-        }
+        $coverage = Get-CmdPeekSubstituteCoverage -InstalledSet $InstalledSet -Catalog $Catalog
+        if ($coverage.ContainsKey($Name.ToLowerInvariant())) { return $true }
     }
 
     return $false

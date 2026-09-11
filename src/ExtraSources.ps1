@@ -220,7 +220,8 @@ function Add-CmdPeekPathCommands {
         [scriptblock]$CommandTester,
         [switch]$IncludeSystemDirectories,
         [string[]]$BinRoot,
-        [int]$UnknownLimit = 40
+        [int]$UnknownLimit = 40,
+        [string]$DataDirectory
     )
 
     if (-not $Catalog) { $Catalog = @{} }
@@ -241,6 +242,14 @@ function Add-CmdPeekPathCommands {
         }
     }
 
+    # Resolve the optional helpers once. Probing for them inside the scan loop costs
+    # one Get-Command per helper per file, which dominates the scan on a full bin dir.
+    $hasRowPackageManager = [bool](Get-Command Get-CmdPeekRowPackageManager -ErrorAction SilentlyContinue)
+    $hasCatalogOrigin = [bool](Get-Command Get-CmdPeekCatalogOrigin -ErrorAction SilentlyContinue)
+    $hasPeSubsystem = [bool](Get-Command Get-CmdPeekPeSubsystem -ErrorAction SilentlyContinue)
+    $hasCatalogEntry = [bool](Get-Command Get-CmdPeekCatalogEntry -ErrorAction SilentlyContinue)
+    $hasCanonical = [bool](Get-Command Get-CmdPeekCanonicalCommand -ErrorAction SilentlyContinue)
+
     $extra = New-Object System.Collections.Generic.List[object]
     foreach ($key in @($Catalog.Keys)) {
         $lk = $key.ToLowerInvariant()
@@ -258,14 +267,14 @@ function Add-CmdPeekPathCommands {
         if (-not $foundName) { continue }
         $entry = $Catalog[$key]
         $pm = 'path'
-        if (Get-Command Get-CmdPeekRowPackageManager -ErrorAction SilentlyContinue) {
+        if ($hasRowPackageManager) {
             $pm = Get-CmdPeekRowPackageManager -Entry $entry -Fallback 'path'
         }
         elseif ($entry -and $entry.PSObject.Properties['origin'] -and ([string]$entry.origin).ToLowerInvariant() -eq 'builtin') {
             $pm = 'builtin'
         }
         $origin = 'path'
-        if (Get-Command Get-CmdPeekCatalogOrigin -ErrorAction SilentlyContinue) {
+        if ($hasCatalogOrigin) {
             $origin = Get-CmdPeekCatalogOrigin -Entry $entry
         }
         $existing[$foundName.ToLowerInvariant()] = $true
@@ -299,6 +308,16 @@ function Add-CmdPeekPathCommands {
         foreach ($n in @(Get-CmdPeekSystemBinDenyName)) { $deny[$n] = $true }
         $unknown = New-Object System.Collections.Generic.List[object]
         $seenFile = @{}
+
+        # Reading PE headers to skip GUI apps is the expensive part of a System32
+        # scan, and the answer only changes when the binary does.
+        $peCachePath = $null
+        $peCache = @{}
+        $peCacheDirty = $false
+        if ($hasPeSubsystem -and (Get-Command Get-CmdPeekPeSubsystemCachePath -ErrorAction SilentlyContinue)) {
+            $peCachePath = Get-CmdPeekPeSubsystemCachePath -DataDirectory $DataDirectory
+            if ($peCachePath) { $peCache = Import-CmdPeekPeSubsystemCache -Path $peCachePath }
+        }
         foreach ($root in $scanRoots) {
             if (-not $root -or -not (Test-Path -LiteralPath $root)) { continue }
             $files = @(Get-ChildItem -LiteralPath $root -File -ErrorAction SilentlyContinue)
@@ -321,28 +340,38 @@ function Add-CmdPeekPathCommands {
                 if ($deny.ContainsKey($sk)) { continue }
                 if ($existing.ContainsKey($sk)) { continue }
 
-                if ($ext -eq '.exe' -and (Get-Command Get-CmdPeekPeSubsystem -ErrorAction SilentlyContinue)) {
-                    $sub = Get-CmdPeekPeSubsystem -Path $file.FullName
+                if ($ext -eq '.exe' -and $hasPeSubsystem) {
+                    $peKey = Get-CmdPeekPeSubsystemCacheKey -File $file
+                    if ($peKey -and $peCache.ContainsKey($peKey)) {
+                        $sub = $peCache[$peKey]
+                    }
+                    else {
+                        $sub = Get-CmdPeekPeSubsystem -Path $file.FullName
+                        if ($peKey) {
+                            $peCache[$peKey] = $sub
+                            $peCacheDirty = $true
+                        }
+                    }
                     if ($sub -eq 2) { continue }
                 }
 
                 $entry = $null
-                if (Get-Command Get-CmdPeekCatalogEntry -ErrorAction SilentlyContinue) {
+                if ($hasCatalogEntry) {
                     $entry = Get-CmdPeekCatalogEntry -Command $stem -Catalog $Catalog
                 }
                 if ($entry) {
                     $canonical = $stem
-                    if (Get-Command Get-CmdPeekCanonicalCommand -ErrorAction SilentlyContinue) {
+                    if ($hasCanonical) {
                         $canonical = Get-CmdPeekCanonicalCommand -Command $stem -Catalog $Catalog
                     }
                     $clk = $canonical.ToLowerInvariant()
                     if ($existing.ContainsKey($clk)) { continue }
                     $pm = 'path'
-                    if (Get-Command Get-CmdPeekRowPackageManager -ErrorAction SilentlyContinue) {
+                    if ($hasRowPackageManager) {
                         $pm = Get-CmdPeekRowPackageManager -Entry $entry -Fallback 'path'
                     }
                     $origin = 'path'
-                    if (Get-Command Get-CmdPeekCatalogOrigin -ErrorAction SilentlyContinue) {
+                    if ($hasCatalogOrigin) {
                         $origin = Get-CmdPeekCatalogOrigin -Entry $entry
                     }
                     $existing[$sk] = $true
@@ -378,6 +407,10 @@ function Add-CmdPeekPathCommands {
         }
         $unknownSorted = @($unknown.ToArray() | Sort-Object @{ Expression = { $_.Command.ToLowerInvariant() } })
         foreach ($row in $unknownSorted) { $extra.Add($row) }
+
+        if ($peCacheDirty -and $peCachePath) {
+            try { Export-CmdPeekPeSubsystemCache -Path $peCachePath -Entries $peCache } catch { }
+        }
     }
 
     return @(@($History) + @($extra.ToArray()))

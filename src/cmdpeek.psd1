@@ -23,6 +23,7 @@
         'Set-CmdPeekPreferredPackageManager'
         'Export-CmdPeekState'
         'Import-CmdPeekState'
+        'ConvertTo-CmdPeekState'
         'Get-CmdPeekUsageExample'
         'Get-CmdPeekExampleCatalog'
         'Get-CmdPeekCatalogKits'

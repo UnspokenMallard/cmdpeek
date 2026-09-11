@@ -16,6 +16,7 @@ import {
   sortGaps,
   cap,
   summarizeSnapshot,
+  installCommandFor,
   AGENT_PLAYBOOK,
 } from "./helpers.js";
 
@@ -479,7 +480,10 @@ server.tool(
   "Return (or optionally execute) a package-manager install command for a catalog tool. Default is dry-run. Set execute=true only with user consent.",
   {
     name: z.string().describe("Command or package name"),
-    manager: z.enum(["scoop", "chocolatey", "winget"]).optional(),
+    manager: z
+      .enum(["scoop", "chocolatey", "winget", "pipx", "npm", "cargo", "brew", "apt", "pacman"])
+      .optional()
+      .describe("Package manager to use. Defaults to the first manager present on this machine."),
     execute: z.boolean().optional().describe("If true, run cmdpeek -Reinstall. Default false (dry-run)."),
   },
   async ({ name, manager, execute }) => {
@@ -487,19 +491,15 @@ server.tool(
     const catalog = filterCatalogCommand(snap.catalog ?? [], name);
     if (isBuiltinCatalog(catalog)) {
       return asText({
-        error: `Command '${name}' is an OS builtin (origin=builtin) and cannot be installed via scoop/choco/winget.`,
+        error: `Command '${name}' is an OS builtin (origin=builtin) and cannot be installed from a package manager.`,
         origin: catalog?.origin ?? "builtin",
       });
     }
     const install = (catalog?.install ?? {}) as Record<string, string>;
-    const pref = manager ?? "scoop";
+    const present = (snap.managers ?? []).filter((m) => m.present).map((m) => m.name);
+    const pref = manager ?? present[0] ?? "scoop";
     const id = install[pref] ?? install.scoop ?? install.winget ?? install.chocolatey ?? name;
-    const command =
-      pref === "chocolatey"
-        ? `choco install ${id} -y`
-        : pref === "winget"
-          ? `winget install --id ${id} -e --accept-package-agreements --accept-source-agreements`
-          : `scoop install ${id}`;
+    const command = installCommandFor(pref, id);
     if (!execute) {
       return asText({ dryRun: true, command, manager: pref, packageId: id });
     }

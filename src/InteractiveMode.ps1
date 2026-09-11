@@ -779,7 +779,7 @@ function Install-CmdPeekTrackedPackage {
         [Parameter(Mandatory)]
         [string]$PackageName,
         [Parameter(Mandatory)]
-        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew')]
+        [ValidateSet('chocolatey', 'scoop', 'winget', 'pipx', 'npm', 'cargo', 'brew', 'apt', 'pacman')]
         [string]$PackageManager
     )
 
@@ -791,11 +791,21 @@ function Install-CmdPeekTrackedPackage {
         'npm' { "npm install -g $PackageName" }
         'cargo' { "cargo install $PackageName" }
         'brew' { "brew install $PackageName" }
+        'apt' { "sudo apt install -y $PackageName" }
+        'pacman' { "sudo pacman -S --noconfirm $PackageName" }
     }
 
     if ($PSCmdlet.ShouldProcess($PackageName, $cmdline)) {
         Write-Host "Running: $cmdline" -ForegroundColor Cyan
-        cmd.exe /c $cmdline
+        $os = 'linux'
+        if (Get-Command Get-CmdPeekCurrentOs -ErrorAction SilentlyContinue) { $os = Get-CmdPeekCurrentOs }
+        elseif ($env:OS -eq 'Windows_NT') { $os = 'windows' }
+        if ($os -eq 'windows') {
+            cmd.exe /c $cmdline
+        }
+        else {
+            & '/bin/sh' '-c' $cmdline
+        }
         return $LASTEXITCODE
     }
 
