@@ -419,7 +419,8 @@ function Format-CmdPeekGapOutput {
     [CmdletBinding()]
     param(
         [AllowEmptyCollection()]
-        [object[]]$Gap
+        [object[]]$Gap,
+        $Summary
     )
 
     $items = @($Gap)
@@ -435,6 +436,19 @@ function Format-CmdPeekGapOutput {
             $install = ('  {0}' -f @($g.installCommands)[0])
         }
         $lines.Add(('  [{0}] {1}  {2}{3}' -f $g.kind, $g.command, $g.reason, $install))
+    }
+    if ($Summary -and $Summary.PSObject.Properties['truncated'] -and $Summary.truncated) {
+        $lines.Add('')
+        $lines.Add(('  Showing {0} of {1} gaps. Narrow with: cmdpeek gaps -GapKind <kind> -GapLimit <n>' -f $Summary.returned, $Summary.total))
+        if ($Summary.PSObject.Properties['counts'] -and $Summary.counts) {
+            $parts = New-Object System.Collections.Generic.List[string]
+            foreach ($prop in $Summary.counts.PSObject.Properties) {
+                if ([int]$prop.Value -gt 0) { $parts.Add(('{0}={1}' -f $prop.Name, [int]$prop.Value)) }
+            }
+            if ($parts.Count -gt 0) {
+                $lines.Add(('  All kinds: {0}' -f (($parts.ToArray()) -join '  ')))
+            }
+        }
     }
     return (($lines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 }

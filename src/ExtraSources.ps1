@@ -397,14 +397,67 @@ function Get-CmdPeekDefaultUnixRoot {
     }
 }
 
-function Get-CmdPeekAptPackage {
+function Get-CmdPeekDefaultAptInfoRoot {
     [CmdletBinding()]
     param(
         [string]$StatusPath
     )
 
     if (-not $StatusPath) { $StatusPath = Get-CmdPeekDefaultUnixRoot -Manager apt }
+    $parent = Split-Path -Parent $StatusPath
+    if (-not $parent) { return $null }
+    return (Join-Path $parent 'info')
+}
+
+function Get-CmdPeekAptFileListMap {
+    [CmdletBinding()]
+    param(
+        [string]$InfoRoot
+    )
+
+    $map = @{}
+    if (-not $InfoRoot -or -not (Test-Path -LiteralPath $InfoRoot)) { return $map }
+    foreach ($file in @(Get-ChildItem -LiteralPath $InfoRoot -Filter '*.list' -File -ErrorAction SilentlyContinue)) {
+        # dpkg names multi-arch file lists "<package>:<arch>.list".
+        $stem = $file.Name.Substring(0, $file.Name.Length - 5)
+        $colon = $stem.IndexOf(':')
+        if ($colon -gt 0) { $stem = $stem.Substring(0, $colon) }
+        $key = $stem.ToLowerInvariant()
+        if (-not $map.ContainsKey($key)) { $map[$key] = $file.FullName }
+    }
+    return $map
+}
+
+function Get-CmdPeekAptPackageCommand {
+    [CmdletBinding()]
+    param(
+        [string]$ListPath
+    )
+
+    $commands = New-Object System.Collections.Generic.List[string]
+    if (-not $ListPath -or -not (Test-Path -LiteralPath $ListPath)) { return @($commands.ToArray()) }
+    foreach ($line in @(Get-Content -LiteralPath $ListPath -ErrorAction SilentlyContinue)) {
+        if (-not $line) { continue }
+        if ($line -notmatch '(^|/)s?bin/([^/]+)$') { continue }
+        $stem = Get-CmdPeekCommandStem -FileName $Matches[2]
+        if ($stem -and $commands -notcontains $stem) { $commands.Add($stem) }
+    }
+    return @($commands.ToArray())
+}
+
+function Get-CmdPeekAptPackage {
+    [CmdletBinding()]
+    param(
+        [string]$StatusPath,
+        [string]$InfoRoot
+    )
+
+    if (-not $StatusPath) { $StatusPath = Get-CmdPeekDefaultUnixRoot -Manager apt }
     if (-not (Test-Path -LiteralPath $StatusPath)) { return @() }
+    if (-not $PSBoundParameters.ContainsKey('InfoRoot')) {
+        $InfoRoot = Get-CmdPeekDefaultAptInfoRoot -StatusPath $StatusPath
+    }
+    $listMap = Get-CmdPeekAptFileListMap -InfoRoot $InfoRoot
 
     $raw = Get-Content -LiteralPath $StatusPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
     if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
@@ -431,7 +484,19 @@ function Get-CmdPeekAptPackage {
         if (-not $name) { continue }
         if (-not $status -or $status -notmatch 'install ok installed') { continue }
         $commands = New-Object System.Collections.Generic.List[string]
-        $commands.Add($name)
+        $listPath = $null
+        if ($listMap.Count -gt 0) { $listPath = $listMap[$name.ToLowerInvariant()] }
+        if ($listPath) {
+            # The dpkg file list tells us whether this package ships an executable at
+            # all. Libraries such as zlib1g ship none, and are not commands.
+            foreach ($binary in @(Get-CmdPeekAptPackageCommand -ListPath $listPath)) {
+                if ($commands -notcontains $binary) { $commands.Add($binary) }
+            }
+            if ($commands.Count -eq 0) { continue }
+        }
+        else {
+            $commands.Add($name)
+        }
         foreach ($p in $provides) {
             if ($p -and $commands -notcontains $p) { $commands.Add($p) }
         }

@@ -13,6 +13,9 @@ import {
   searchSnapshotCommands,
   filterSystemCommands,
   isBuiltinCatalog,
+  sortGaps,
+  cap,
+  summarizeSnapshot,
   AGENT_PLAYBOOK,
 } from "./helpers.js";
 
@@ -74,8 +77,18 @@ type Snapshot = {
     onPathManager?: string;
     installCommands?: string[];
   }>;
+  gapSummary?: {
+    total?: number;
+    returned?: number;
+    truncated?: boolean;
+    counts?: Record<string, number>;
+    note?: string;
+  };
   rusty?: Array<{ command: string; kind: string; lastLine?: string; lastUsedAt?: string; packageManager?: string }>;
 };
+
+// Every list tool caps its answer so one call cannot swamp an agent's context.
+const DEFAULT_LIST_LIMIT = 25;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.CMDPEEK_ROOT
@@ -202,8 +215,15 @@ server.tool(
   },
   async ({ query, limit }) => {
     const snap = await loadSnapshot();
-    const hits = searchSnapshotCommands(snap.commands ?? [], query, limit ?? 20);
-    return asText({ query, commands: hits });
+    const all = searchSnapshotCommands(snap.commands ?? [], query, Number.MAX_SAFE_INTEGER);
+    const page = cap(all, limit ?? DEFAULT_LIST_LIMIT);
+    return asText({
+      query,
+      commands: page.items,
+      returned: page.returned,
+      matched: page.total,
+      truncated: page.truncated,
+    });
   },
 );
 
@@ -249,11 +269,13 @@ server.tool(
   "Map a task or capability to tools. Always prefer installed matches, then OS builtins on this machine, before suggesting a new package.",
   {
     task: z.string().describe('Task, capability, or tool name, e.g. "pretty-print json" or "search"'),
-    limit: z.number().int().min(1).max(50).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum matches per group (default 10)"),
   },
-  async ({ task }) => {
+  async ({ task, limit }) => {
     try {
-      const raw = await runCmdPeek(["-Task", task, "-Json"]);
+      const extra = ["-Task", task, "-Json"];
+      if (limit) extra.push("-TaskLimit", String(limit));
+      const raw = await runCmdPeek(extra);
       return asText(JSON.parse(raw));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -319,7 +341,7 @@ server.tool(
 
 server.tool(
   "list_gaps",
-  "Identify tooling gaps: missing related CLIs, thin docs, not-on-path, shadowing (includes PATH winner), incomplete kits with install commands, and category neighbors. Prefer resolve_task before telling the user to install something.",
+  "Identify tooling gaps: missing related CLIs, not-on-path, shadowing (includes PATH winner), incomplete kits with install commands, and category neighbors. Ranked and capped; thin-docs is excluded unless you ask for it by kind. Call with summary=true first to see how many of each kind exist. Prefer resolve_task before telling the user to install something.",
   {
     kind: z
       .enum([
@@ -332,12 +354,41 @@ server.tool(
         "all",
       ])
       .optional()
-      .describe("Gap kind to return (default all)"),
+      .describe("Gap kind to return (default: every kind except thin-docs)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(`Maximum gaps to return (default ${DEFAULT_LIST_LIMIT})`),
+    summary: z
+      .boolean()
+      .optional()
+      .describe("Return only per-kind counts, no gap rows"),
   },
-  async ({ kind }) => {
+  async ({ kind, limit, summary }) => {
     const snap = await loadSnapshot();
-    const gaps = filterGaps(snap.gaps ?? [], kind);
-    return asText({ gaps });
+    if (summary) {
+      return asText({ summary: snap.gapSummary ?? null });
+    }
+    // thin-docs is dropped from the cached snapshot, so ask cmdpeek for it directly.
+    let rows = snap.gaps ?? [];
+    if (kind === "thin-docs" || kind === "all") {
+      const max = limit ?? DEFAULT_LIST_LIMIT;
+      const raw = await runCmdPeek(["-Gaps", "-Json", "-GapKind", kind, "-GapLimit", String(max)]);
+      const parsed = JSON.parse(raw) as { gaps?: Snapshot["gaps"]; summary?: Snapshot["gapSummary"] };
+      return asText({ gaps: parsed.gaps ?? [], summary: parsed.summary ?? null });
+    }
+    rows = sortGaps(filterGaps(rows, kind));
+    const page = cap(rows, limit ?? DEFAULT_LIST_LIMIT);
+    return asText({
+      gaps: page.items,
+      returned: page.returned,
+      matched: page.total,
+      truncated: page.truncated,
+      summary: snap.gapSummary ?? null,
+    });
   },
 );
 
@@ -346,11 +397,17 @@ server.tool(
   "Installed CLIs that do not appear in recent PSReadLine history (never used, or not in the last 500 history lines). Use this to remind the user how to use idle tools. Not a packaging gap.",
   {
     kind: z.enum(["never", "stale", "all"]).optional().describe("Rusty kind to return (default all)"),
+    limit: z.number().int().min(1).max(200).optional().describe(`Maximum rows to return (default ${DEFAULT_LIST_LIMIT})`),
   },
-  async ({ kind }) => {
+  async ({ kind, limit }) => {
     const snap = await loadSnapshot();
-    const rusty = filterRusty(snap.rusty ?? [], kind);
-    return asText({ rusty });
+    const page = cap(filterRusty(snap.rusty ?? [], kind), limit ?? DEFAULT_LIST_LIMIT);
+    return asText({
+      rusty: page.items,
+      returned: page.returned,
+      matched: page.total,
+      truncated: page.truncated,
+    });
   },
 );
 
@@ -511,7 +568,7 @@ server.tool(
     return asText({
       generatedAt: snap.generatedAt,
       commandCount: snap.commands?.length ?? 0,
-      gapCount: snap.gaps?.length ?? 0,
+      gapCount: snap.gapSummary?.total ?? snap.gaps?.length ?? 0,
     });
   },
 );
@@ -521,19 +578,30 @@ server.resource("inventory", "cmdpeek://inventory", async () => ({
     {
       uri: "cmdpeek://inventory",
       mimeType: "application/json",
-      text: JSON.stringify(await loadSnapshot(), null, 2),
+      text: JSON.stringify(summarizeSnapshot(await loadSnapshot()), null, 2),
     },
   ],
 }));
 
 server.resource("gaps", "cmdpeek://gaps", async () => {
   const snap = await loadSnapshot();
+  const page = cap(sortGaps(snap.gaps ?? []), DEFAULT_LIST_LIMIT);
   return {
     contents: [
       {
         uri: "cmdpeek://gaps",
         mimeType: "application/json",
-        text: JSON.stringify(snap.gaps ?? [], null, 2),
+        text: JSON.stringify(
+          {
+            gaps: page.items,
+            returned: page.returned,
+            matched: page.total,
+            truncated: page.truncated,
+            summary: snap.gapSummary ?? null,
+          },
+          null,
+          2,
+        ),
       },
     ],
   };
@@ -584,12 +652,26 @@ server.resource("system", "cmdpeek://system", async () => {
   const catalog = (snap.catalog ?? []).filter(
     (c) => (c.origin ?? "").toLowerCase() === "builtin" || (c.category ?? "").toLowerCase() === "system",
   );
+  const commandPage = cap(commands, 60);
+  const catalogPage = cap(catalog, 60);
   return {
     contents: [
       {
         uri: "cmdpeek://system",
         mimeType: "application/json",
-        text: JSON.stringify({ commands, catalog }, null, 2),
+        text: JSON.stringify(
+          {
+            commands: commandPage.items,
+            commandsTotal: commandPage.total,
+            commandsTruncated: commandPage.truncated,
+            catalog: catalogPage.items,
+            catalogTotal: catalogPage.total,
+            catalogTruncated: catalogPage.truncated,
+            note: "Use get_command for detail on a specific name.",
+          },
+          null,
+          2,
+        ),
       },
     ],
   };
