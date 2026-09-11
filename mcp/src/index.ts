@@ -183,9 +183,24 @@ function asText(value: unknown): { content: Array<{ type: "text"; text: string }
 const unsafeNote =
   "Do not run usage lines that contain <placeholders> or usageDetails.unsafe=true; copy them for the user instead.";
 
+// Read rather than hardcode: a third copy of the version is a third thing to forget
+// to bump, and cmdpeek doctor compares the module against package.json.
+function packageVersion(): string {
+  for (const dir of [here, path.join(here, ".."), path.join(here, "..", "..")]) {
+    const candidate = path.join(dir, "package.json");
+    try {
+      const pkg = JSON.parse(fs.readFileSync(candidate, "utf8")) as { name?: string; version?: string };
+      if (pkg.name === "@cmdpeek/mcp" && pkg.version) return pkg.version;
+    } catch {
+      // keep looking
+    }
+  }
+  return "0.0.0";
+}
+
 const server = new McpServer({
   name: "cmdpeek",
-  version: "0.2.0",
+  version: packageVersion(),
 });
 
 server.tool(
@@ -561,6 +576,28 @@ server.tool(
 );
 
 server.tool(
+  "diagnose",
+  "Health check for this machine's cmdpeek setup: versions, data directory, detected package managers, catalog counts and validation errors, cache ages, and shell history. Call this when a cmdpeek answer looks wrong, empty, or stale.",
+  {
+    timing: z
+      .boolean()
+      .optional()
+      .describe("Also measure per-stage scan timings. Costs a full rescan, so leave this off unless diagnosing slowness."),
+  },
+  async ({ timing }) => {
+    try {
+      const extra = ["-Doctor", "-Json"];
+      if (timing) extra.push("-Timing");
+      const raw = await runCmdPeek(extra);
+      return asText(JSON.parse(raw));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return asText({ error: message });
+    }
+  },
+);
+
+server.tool(
   "refresh_inventory",
   "Rescan package managers and PATH, bypass caches. Call this after installing or uninstalling a package, then call list_recent_commands.",
   async () => {
@@ -602,6 +639,19 @@ server.resource("gaps", "cmdpeek://gaps", async () => {
           null,
           2,
         ),
+      },
+    ],
+  };
+});
+
+server.resource("doctor", "cmdpeek://doctor", async () => {
+  const raw = await runCmdPeek(["-Doctor", "-Json"]);
+  return {
+    contents: [
+      {
+        uri: "cmdpeek://doctor",
+        mimeType: "application/json",
+        text: raw.trim(),
       },
     ],
   };

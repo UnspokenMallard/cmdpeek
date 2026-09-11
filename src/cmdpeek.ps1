@@ -92,6 +92,13 @@ param(
 
     [string]$Suggest,
 
+    [switch]$Doctor,
+
+    [switch]$Timing,
+
+    [Alias('v')]
+    [switch]$Version,
+
     [switch]$Help
 )
 
@@ -118,6 +125,9 @@ Usage:
   cmdpeek gaps            Human-readable inventory gaps (ranked, capped, no thin-docs)
   cmdpeek gaps -GapKind thin-docs -GapLimit 0    One gap kind, uncapped
   cmdpeek rusty           Installed tools missing from recent history
+  cmdpeek doctor          Environment, catalog, and cache health check
+  cmdpeek doctor -Timing  Same, plus per-stage scan timings
+  cmdpeek --version       Module and MCP server versions
   cmdpeek search-available fzf   Catalog + optional package-manager search
   cmdpeek -Since 7d       Window: last|all|ISO|24h|7d (not minutes)
   cmdpeek -i              Interactive mode
@@ -179,6 +189,12 @@ elseif ($verb -eq 'gaps') {
 elseif ($verb -eq 'rusty') {
     $invoke.Rusty = $true
 }
+elseif ($verb -eq 'doctor') {
+    $invoke.Doctor = $true
+}
+elseif ($verb -eq 'version') {
+    $invoke.Version = $true
+}
 elseif ($verb -eq 'have') {
     $invoke.Have = $true
     if ($rest) { $invoke.Capability = $rest }
@@ -205,7 +221,7 @@ elseif ($Argument -and $Argument -match '^\d+$') {
 
 if ($Interactive) { $invoke.Interactive = $true }
 if ($Search) { $invoke.Search = $Search }
-elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'have', 'search-available', 'agent-export', 'compare', 'suggest')) {
+elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'doctor', 'version', 'have', 'search-available', 'agent-export', 'compare', 'suggest')) {
     $invoke.Search = $Argument
 }
 if ($Category) { $invoke.Category = $Category }
@@ -239,5 +255,8 @@ if ($AgentExport) { $invoke.AgentExport = $true }
 if ($AgentExportPath) { $invoke.AgentExportPath = $AgentExportPath }
 if ($Compare) { $invoke.Compare = $Compare }
 if ($Suggest) { $invoke.Suggest = $Suggest }
+if ($Doctor) { $invoke.Doctor = $true }
+if ($Timing) { $invoke.Timing = $true }
+if ($Version) { $invoke.Version = $true }
 
 Invoke-CmdPeek @invoke
