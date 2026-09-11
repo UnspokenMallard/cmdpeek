@@ -98,6 +98,10 @@ param(
 
     [switch]$IncludeUndocumented,
 
+    [switch]$CatalogLint,
+
+    [string[]]$CatalogPath,
+
     [switch]$Doctor,
 
     [switch]$Timing,
@@ -132,6 +136,7 @@ Usage:
   cmdpeek gaps            Human-readable inventory gaps (ranked, capped, no thin-docs)
   cmdpeek gaps -GapKind thin-docs -GapLimit 0    One gap kind, uncapped
   cmdpeek rusty           Installed tools missing from recent history
+  cmdpeek catalog-lint    Validate catalog files and report field coverage
   cmdpeek doctor          Environment, catalog, and cache health check
   cmdpeek doctor -Timing  Same, plus per-stage scan timings
   cmdpeek --version       Module and MCP server versions
@@ -210,6 +215,10 @@ elseif ($verb -eq 'doctor') {
 elseif ($verb -eq 'version') {
     $invoke.Version = $true
 }
+elseif ($verb -eq 'catalog-lint') {
+    $invoke.CatalogLint = $true
+    if ($rest) { $invoke.CatalogPath = @($rest) }
+}
 elseif ($verb -eq 'have') {
     $invoke.Have = $true
     if ($rest) { $invoke.Capability = $rest }
@@ -236,7 +245,7 @@ elseif ($Argument -and $Argument -match '^\d+$') {
 
 if ($Interactive) { $invoke.Interactive = $true }
 if ($Search) { $invoke.Search = $Search }
-elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'doctor', 'version', 'have', 'search-available', 'agent-export', 'compare', 'suggest')) {
+elseif ($Argument -and $Argument -notmatch '^\d+$' -and $Argument -notmatch '^-' -and $verb -notin @('for', 'explain', 'why', 'recent', 'gaps', 'rusty', 'doctor', 'version', 'catalog-lint', 'have', 'search-available', 'agent-export', 'compare', 'suggest')) {
     $invoke.Search = $Argument
 }
 if ($Category) { $invoke.Category = $Category }
@@ -273,8 +282,27 @@ if ($AgentExportPath) { $invoke.AgentExportPath = $AgentExportPath }
 if ($Compare) { $invoke.Compare = $Compare }
 if ($Suggest) { $invoke.Suggest = $Suggest }
 if ($IncludeUndocumented) { $invoke.IncludeUndocumented = $true }
+if ($CatalogLint) { $invoke.CatalogLint = $true }
+if ($CatalogPath) { $invoke.CatalogPath = $CatalogPath }
 if ($Doctor) { $invoke.Doctor = $true }
 if ($Timing) { $invoke.Timing = $true }
 if ($Version) { $invoke.Version = $true }
+
+# catalog-lint is the one path meant to gate a build, so it reports through the exit
+# code rather than only printing. Run it here instead of through Invoke-CmdPeek.
+if ($invoke.ContainsKey('CatalogLint')) {
+    $lintArgs = @{}
+    if ($invoke.ContainsKey('CatalogPath')) { $lintArgs.Path = @($invoke.CatalogPath) }
+    if ($ExamplesPath) { $lintArgs.ExamplesPath = $ExamplesPath }
+    $lint = Invoke-CmdPeekCatalogLint @lintArgs
+    if ($Json) {
+        Write-Output ($lint | ConvertTo-Json -Depth 7)
+    }
+    else {
+        Write-Output (Format-CmdPeekCatalogLint -Lint $lint)
+    }
+    if ($lint.errorCount -gt 0) { exit 1 }
+    exit 0
+}
 
 Invoke-CmdPeek @invoke
