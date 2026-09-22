@@ -58,6 +58,16 @@ if (Test-Path -LiteralPath $examples) {
     Copy-Item -Path (Join-Path $examples '*') -Destination $exampleDest -Force
 }
 
+# The MCP server runs from a checkout (see README), so only its manifest is
+# installed: without it cmdpeek doctor reads no MCP version and the module/MCP
+# drift check silently passes.
+$mcpPackageJson = Join-Path $repoRoot 'mcp/package.json'
+if (Test-Path -LiteralPath $mcpPackageJson) {
+    $mcpDest = Join-Path $InstallDir 'mcp'
+    New-Item -ItemType Directory -Force -Path $mcpDest | Out-Null
+    Copy-Item -Path $mcpPackageJson -Destination $mcpDest -Force
+}
+
 $shim = Join-Path $binDest 'cmdpeek.cmd'
 @(
     '@echo off'
