@@ -29,7 +29,11 @@ function Format-CmdPeekQuickOutput {
         if ($Rusty) {
             return "No rusty tools.`n"
         }
-        return "No installed commands found.`nInstall packages with scoop, choco, or winget, then run cmdpeek again."
+        $hint = 'Install packages with scoop, choco, or winget, then run cmdpeek again.'
+        if ((Get-CmdPeekCurrentOs) -ne 'windows') {
+            $hint = 'Install packages with brew, npm, pipx, cargo, apt, or pacman, then run cmdpeek again.'
+        }
+        return "No installed commands found.`n$hint"
     }
 
     if ($ExampleCount -lt 1) { $ExampleCount = 3 }

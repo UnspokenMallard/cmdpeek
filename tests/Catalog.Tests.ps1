@@ -235,3 +235,15 @@ Describe 'running an example line' {
         $out | Should -Match 'cmdpeek-ok'
     }
 }
+
+Describe 'install guesses on macOS' {
+    It 'leads with brew and drops the Windows-only managers' {
+        if ((Get-CmdPeekCurrentOs) -ne 'macos') {
+            Set-ItResult -Skipped -Because 'runs on macOS only'
+            return
+        }
+        $lines = @(Get-CmdPeekInstallCommands -Command 'cmdpeek-no-such-binary' -Catalog @{})
+        $lines[0] | Should -Be 'brew install cmdpeek-no-such-binary'
+        ($lines -join "`n") | Should -Not -Match 'scoop|choco|winget'
+    }
+}

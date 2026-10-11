@@ -605,6 +605,9 @@ function Get-CmdPeekInstallCommands {
     $entry = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
     $map = Get-CmdPeekCatalogInstallMap -Entry $entry
     $order = @('scoop', 'winget', 'chocolatey', 'brew', 'pipx', 'npm', 'cargo', 'apt')
+    $onMac = (Get-CmdPeekCurrentOs) -eq 'macos'
+    # Windows-only and Linux-only managers are noise on a Mac, and brew is the usual route.
+    if ($onMac) { $order = @('brew', 'pipx', 'npm', 'cargo') }
     if ($PreferredManager) {
         $pref = $PreferredManager.ToLowerInvariant()
         if ($pref -eq 'choco') { $pref = 'chocolatey' }
@@ -647,7 +650,10 @@ function Get-CmdPeekInstallCommands {
         }
         if ($line) { $lines.Add($line) }
     }
-    if ($lines.Count -eq 0) {
+    if ($lines.Count -eq 0 -and $onMac) {
+        $lines.Add("brew install $Command")
+    }
+    elseif ($lines.Count -eq 0) {
         $lines.Add("scoop install $Command")
         $lines.Add("choco install $Command -y")
         $lines.Add("winget install $Command")
