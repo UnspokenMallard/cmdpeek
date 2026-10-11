@@ -231,6 +231,17 @@ function Get-CmdPeekCurrentOs {
 
 $script:CmdPeekShellBuiltinMemo = @{}
 
+function Test-CmdPeekSystemBinaryPath {
+    [CmdletBinding()]
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $p = $Path -replace '\\', '/'
+    return [bool]($p -match '^/(usr/)?s?bin/' -or $p -match '^/System/' -or $p -match '(?i)^[A-Za-z]:/Windows/System32/')
+}
+
 function Test-CmdPeekShellBuiltinName {
     [CmdletBinding()]
     param(
@@ -246,16 +257,15 @@ function Test-CmdPeekShellBuiltinName {
     $resolved = @()
     try { $resolved = @(Get-Command -Name $Command -All -ErrorAction SilentlyContinue) } catch { $resolved = @() }
 
-    # An Application is a file on disk, so some package could have put it there and
-    # an install line is fair. Anything that only resolves as an alias, function, or
-    # cmdlet ships with the shell and cannot be installed by any manager.
-    $answer = $false
-    if ($resolved.Count -gt 0) {
-        $answer = $true
-        foreach ($item in $resolved) {
-            if ($item.CommandType -eq 'Application') { $answer = $false; break }
-        }
-    }
+    # An Application outside the OS directories is a file some package could have put
+    # there, so an install line is fair. macOS ships a real /usr/bin/cd that the shell
+    # never runs, so a system binary does not make a name installable. A name the
+    # shell owns (alias, function, cmdlet) with no package-owned binary is a builtin.
+    $shellOwned = @($resolved | Where-Object { $_.CommandType -ne 'Application' })
+    $packageOwned = @($resolved | Where-Object {
+            $_.CommandType -eq 'Application' -and -not (Test-CmdPeekSystemBinaryPath -Path $_.Source)
+        })
+    $answer = ($shellOwned.Count -gt 0) -and ($packageOwned.Count -eq 0)
 
     $script:CmdPeekShellBuiltinMemo[$key] = $answer
     return $answer
