@@ -843,7 +843,7 @@ function Invoke-CmdPeekTui {
                     [Console]::Write("$esc[?1049l")
                     [Console]::CursorVisible = $true
                     Write-Host "Running: $copySource" -ForegroundColor Cyan
-                    cmd.exe /c $copySource
+                    Invoke-CmdPeekShellLine -CommandLine $copySource
                     Write-Host 'Press any key to return to cmdpeek...'
                     [void][Console]::ReadKey($true)
                     [Console]::CursorVisible = $false

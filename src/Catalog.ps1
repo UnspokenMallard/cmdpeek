@@ -229,6 +229,21 @@ function Get-CmdPeekCurrentOs {
     return 'linux'
 }
 
+function Invoke-CmdPeekShellLine {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$CommandLine
+    )
+
+    if ((Get-CmdPeekCurrentOs) -eq 'windows') {
+        cmd.exe /c $CommandLine
+    }
+    else {
+        & '/bin/sh' '-c' $CommandLine
+    }
+}
+
 $script:CmdPeekShellBuiltinMemo = @{}
 
 function Test-CmdPeekSystemBinaryPath {

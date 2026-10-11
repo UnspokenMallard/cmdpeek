@@ -618,7 +618,7 @@ function Show-CmdPeekDetail {
                     $confirm = Read-Host "Run ``$text``? [y/N]"
                     if ($confirm -match '^[Yy]') {
                         Write-Host ''
-                        cmd.exe /c $text
+                        Invoke-CmdPeekShellLine -CommandLine $text
                         [void](Read-Host 'Press Enter to continue')
                     }
                 }
@@ -811,15 +811,7 @@ function Install-CmdPeekTrackedPackage {
 
     if ($PSCmdlet.ShouldProcess($PackageName, $cmdline)) {
         Write-Host "Running: $cmdline" -ForegroundColor Cyan
-        $os = 'linux'
-        if (Get-Command Get-CmdPeekCurrentOs -ErrorAction SilentlyContinue) { $os = Get-CmdPeekCurrentOs }
-        elseif ($env:OS -eq 'Windows_NT') { $os = 'windows' }
-        if ($os -eq 'windows') {
-            cmd.exe /c $cmdline
-        }
-        else {
-            & '/bin/sh' '-c' $cmdline
-        }
+        Invoke-CmdPeekShellLine -CommandLine $cmdline
         return $LASTEXITCODE
     }
 

@@ -228,3 +228,10 @@ Describe 'Get-CmdPeekSubstituteCoverage' {
         Test-CmdPeekNameCovered -Name 'grep' -InstalledSet @{ 'jq' = $true } -Catalog $catalog | Should -BeFalse
     }
 }
+
+Describe 'running an example line' {
+    It 'runs the line through the host shell and returns its output' {
+        $out = Invoke-CmdPeekShellLine -CommandLine 'echo cmdpeek-ok' | Out-String
+        $out | Should -Match 'cmdpeek-ok'
+    }
+}
