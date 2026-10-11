@@ -138,6 +138,16 @@ Describe 'shell builtins are not installable' {
         Test-CmdPeekShellBuiltinName -Command '' | Should -BeFalse
     }
 
+    It 'treats OS binary folders as system, not package-owned' {
+        Test-CmdPeekSystemBinaryPath -Path '/usr/bin/cd' | Should -BeTrue
+        Test-CmdPeekSystemBinaryPath -Path '/bin/ls' | Should -BeTrue
+        Test-CmdPeekSystemBinaryPath -Path 'C:\Windows\System32\curl.exe' | Should -BeTrue
+        Test-CmdPeekSystemBinaryPath -Path '/opt/homebrew/bin/jq' | Should -BeFalse
+        Test-CmdPeekSystemBinaryPath -Path '/binaries/tool' | Should -BeFalse
+        Test-CmdPeekSystemBinaryPath -Path 'C:\Users\me\scoop\shims\jq.exe' | Should -BeFalse
+        Test-CmdPeekSystemBinaryPath -Path '' | Should -BeFalse
+    }
+
     It 'emits no install guess for a name the shell owns' {
         @(Get-CmdPeekInstallCommands -Command 'cd' -Catalog @{}) | Should -BeNullOrEmpty
     }
@@ -216,5 +226,24 @@ Describe 'Get-CmdPeekSubstituteCoverage' {
         }
         Test-CmdPeekNameCovered -Name 'grep' -InstalledSet @{ 'rg' = $true } -Catalog $catalog | Should -BeTrue
         Test-CmdPeekNameCovered -Name 'grep' -InstalledSet @{ 'jq' = $true } -Catalog $catalog | Should -BeFalse
+    }
+}
+
+Describe 'running an example line' {
+    It 'runs the line through the host shell and returns its output' {
+        $out = Invoke-CmdPeekShellLine -CommandLine 'echo cmdpeek-ok' | Out-String
+        $out | Should -Match 'cmdpeek-ok'
+    }
+}
+
+Describe 'install guesses on macOS' {
+    It 'leads with brew and drops the Windows-only managers' {
+        if ((Get-CmdPeekCurrentOs) -ne 'macos') {
+            Set-ItResult -Skipped -Because 'runs on macOS only'
+            return
+        }
+        $lines = @(Get-CmdPeekInstallCommands -Command 'cmdpeek-no-such-binary' -Catalog @{})
+        $lines[0] | Should -Be 'brew install cmdpeek-no-such-binary'
+        ($lines -join "`n") | Should -Not -Match 'scoop|choco|winget'
     }
 }

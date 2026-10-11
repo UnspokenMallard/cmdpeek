@@ -229,7 +229,33 @@ function Get-CmdPeekCurrentOs {
     return 'linux'
 }
 
+function Invoke-CmdPeekShellLine {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$CommandLine
+    )
+
+    if ((Get-CmdPeekCurrentOs) -eq 'windows') {
+        cmd.exe /c $CommandLine
+    }
+    else {
+        & '/bin/sh' '-c' $CommandLine
+    }
+}
+
 $script:CmdPeekShellBuiltinMemo = @{}
+
+function Test-CmdPeekSystemBinaryPath {
+    [CmdletBinding()]
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $p = $Path -replace '\\', '/'
+    return [bool]($p -match '^/(usr/)?s?bin/' -or $p -match '^/System/' -or $p -match '(?i)^[A-Za-z]:/Windows/System32/')
+}
 
 function Test-CmdPeekShellBuiltinName {
     [CmdletBinding()]
@@ -246,16 +272,15 @@ function Test-CmdPeekShellBuiltinName {
     $resolved = @()
     try { $resolved = @(Get-Command -Name $Command -All -ErrorAction SilentlyContinue) } catch { $resolved = @() }
 
-    # An Application is a file on disk, so some package could have put it there and
-    # an install line is fair. Anything that only resolves as an alias, function, or
-    # cmdlet ships with the shell and cannot be installed by any manager.
-    $answer = $false
-    if ($resolved.Count -gt 0) {
-        $answer = $true
-        foreach ($item in $resolved) {
-            if ($item.CommandType -eq 'Application') { $answer = $false; break }
-        }
-    }
+    # An Application outside the OS directories is a file some package could have put
+    # there, so an install line is fair. macOS ships a real /usr/bin/cd that the shell
+    # never runs, so a system binary does not make a name installable. A name the
+    # shell owns (alias, function, cmdlet) with no package-owned binary is a builtin.
+    $shellOwned = @($resolved | Where-Object { $_.CommandType -ne 'Application' })
+    $packageOwned = @($resolved | Where-Object {
+            $_.CommandType -eq 'Application' -and -not (Test-CmdPeekSystemBinaryPath -Path $_.Source)
+        })
+    $answer = ($shellOwned.Count -gt 0) -and ($packageOwned.Count -eq 0)
 
     $script:CmdPeekShellBuiltinMemo[$key] = $answer
     return $answer
@@ -580,6 +605,9 @@ function Get-CmdPeekInstallCommands {
     $entry = Get-CmdPeekCatalogEntry -Command $Command -Catalog $Catalog
     $map = Get-CmdPeekCatalogInstallMap -Entry $entry
     $order = @('scoop', 'winget', 'chocolatey', 'brew', 'pipx', 'npm', 'cargo', 'apt')
+    $onMac = (Get-CmdPeekCurrentOs) -eq 'macos'
+    # Windows-only and Linux-only managers are noise on a Mac, and brew is the usual route.
+    if ($onMac) { $order = @('brew', 'pipx', 'npm', 'cargo') }
     if ($PreferredManager) {
         $pref = $PreferredManager.ToLowerInvariant()
         if ($pref -eq 'choco') { $pref = 'chocolatey' }
@@ -622,7 +650,10 @@ function Get-CmdPeekInstallCommands {
         }
         if ($line) { $lines.Add($line) }
     }
-    if ($lines.Count -eq 0) {
+    if ($lines.Count -eq 0 -and $onMac) {
+        $lines.Add("brew install $Command")
+    }
+    elseif ($lines.Count -eq 0) {
         $lines.Add("scoop install $Command")
         $lines.Add("choco install $Command -y")
         $lines.Add("winget install $Command")
