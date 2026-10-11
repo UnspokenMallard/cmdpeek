@@ -19,6 +19,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# $IsWindows does not exist in Windows PowerShell 5.1, so ask the runtime directly.
+$onWindows = ($env:OS -eq 'Windows_NT') -or ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
+
 if (-not $InstallDir) {
     $localApp = $env:LOCALAPPDATA
     if (-not $localApp) {
@@ -31,7 +34,7 @@ if (-not $InstallDir) {
 
 $repoRoot = $PSScriptRoot
 if (-not $repoRoot) {
-    $tmp = Join-Path $env:TEMP ('cmdpeek-install-' + [guid]::NewGuid().ToString('N'))
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('cmdpeek-install-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tmp -Force | Out-Null
     $zip = Join-Path $tmp 'cmdpeek.zip'
     $url = 'https://github.com/UnspokenMallard/cmdpeek/archive/refs/heads/main.zip'
@@ -68,29 +71,58 @@ if (Test-Path -LiteralPath $mcpPackageJson) {
     Copy-Item -Path $mcpPackageJson -Destination $mcpDest -Force
 }
 
-$shim = Join-Path $binDest 'cmdpeek.cmd'
-@(
-    '@echo off'
-    'setlocal'
-    'set "SCRIPT=%~dp0..\module\cmdpeek.ps1"'
-    'where pwsh >nul 2>&1 && ('
-    '  pwsh -NoProfile -File "%SCRIPT%" %*'
-    '  exit /b %ERRORLEVEL%'
-    ')'
-    'powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*'
-) | Set-Content -LiteralPath $shim -Encoding ASCII
+if ($onWindows) {
+    $shim = Join-Path $binDest 'cmdpeek.cmd'
+    @(
+        '@echo off'
+        'setlocal'
+        'set "SCRIPT=%~dp0..\module\cmdpeek.ps1"'
+        'where pwsh >nul 2>&1 && ('
+        '  pwsh -NoProfile -File "%SCRIPT%" %*'
+        '  exit /b %ERRORLEVEL%'
+        ')'
+        'powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*'
+    ) | Set-Content -LiteralPath $shim -Encoding ASCII
+}
+else {
+    # macOS and Linux have no cmdpeek.cmd. A POSIX shim runs pwsh on the installed script.
+    $shim = Join-Path $binDest 'cmdpeek'
+    $script = Join-Path $moduleDest 'cmdpeek.ps1'
+    $quotedScript = "'" + ($script -replace "'", "'\''") + "'"
+    @(
+        '#!/bin/sh'
+        'command -v pwsh >/dev/null 2>&1 || { echo "cmdpeek needs PowerShell 7 (pwsh) on PATH: brew install powershell" >&2; exit 1; }'
+        "exec pwsh -NoProfile -File $quotedScript `"`$@`""
+    ) | Set-Content -LiteralPath $shim -Encoding ASCII
+    & chmod +x $shim
+}
 
-$ps7Modules = Join-Path $HOME 'Documents\PowerShell\Modules\cmdpeek'
-$ps5Modules = Join-Path $HOME 'Documents\WindowsPowerShell\Modules\cmdpeek'
-foreach ($modPath in @($ps7Modules, $ps5Modules)) {
+if ($onWindows) {
+    $ps7Modules = Join-Path $HOME 'Documents\PowerShell\Modules\cmdpeek'
+    $ps5Modules = Join-Path $HOME 'Documents\WindowsPowerShell\Modules\cmdpeek'
+    $moduleLocations = @($ps7Modules, $ps5Modules)
+}
+else {
+    # pwsh on macOS and Linux finds user modules under ~/.local/share/powershell/Modules.
+    $moduleLocations = @(Join-Path $HOME '.local/share/powershell/Modules/cmdpeek')
+}
+foreach ($modPath in $moduleLocations) {
     $parent = Split-Path -Parent $modPath
     if (-not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
-    if (Test-Path -LiteralPath $modPath) {
-        Remove-Item -LiteralPath $modPath -Recurse -Force
+    $existing = Get-Item -LiteralPath $modPath -Force -ErrorAction SilentlyContinue
+    if ($existing) {
+        # A link is removed alone. Recursing through it could delete the module's source.
+        if ($existing.LinkType) { Remove-Item -LiteralPath $modPath -Force }
+        else { Remove-Item -LiteralPath $modPath -Recurse -Force }
     }
-    New-Item -ItemType Junction -Path $modPath -Target $moduleDest -ErrorAction SilentlyContinue | Out-Null
+    if ($onWindows) {
+        New-Item -ItemType Junction -Path $modPath -Target $moduleDest -ErrorAction SilentlyContinue | Out-Null
+    }
+    else {
+        New-Item -ItemType SymbolicLink -Path $modPath -Target $moduleDest -ErrorAction SilentlyContinue | Out-Null
+    }
     if (-not (Test-Path -LiteralPath $modPath)) {
         New-Item -ItemType Directory -Path $modPath -Force | Out-Null
         Copy-Item -Path (Join-Path $moduleDest '*') -Destination $modPath -Recurse -Force
@@ -100,14 +132,29 @@ foreach ($modPath in @($ps7Modules, $ps5Modules)) {
 # The user PATH is updated by default. -AddToPath is accepted so the intent can be
 # stated explicitly, and it wins if both switches are somehow passed.
 if ($AddToPath -or -not $SkipPath) {
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if (-not $userPath) { $userPath = '' }
-    $parts = @($userPath -split ';' | Where-Object { $_ })
-    if ($parts -notcontains $binDest) {
-        $newPath = ($parts + $binDest) -join ';'
-        [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-        $env:Path = $binDest + ';' + $env:Path
-        Write-Host "Added $binDest to your user PATH. Open a new terminal to use cmdpeek."
+    if ($onWindows) {
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if (-not $userPath) { $userPath = '' }
+        $parts = @($userPath -split ';' | Where-Object { $_ })
+        if ($parts -notcontains $binDest) {
+            $newPath = ($parts + $binDest) -join ';'
+            [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+            $env:Path = $binDest + ';' + $env:Path
+            Write-Host "Added $binDest to your user PATH. Open a new terminal to use cmdpeek."
+        }
+    }
+    else {
+        # Windows keeps PATH in the registry. macOS and Linux read it from a shell
+        # startup file, so add one marked line to ~/.zprofile (the macOS login shell).
+        $zprofile = Join-Path $HOME '.zprofile'
+        $pathLine = 'export PATH="' + $binDest + ':$PATH"'
+        $existingProfile = ''
+        if (Test-Path -LiteralPath $zprofile) { $existingProfile = Get-Content -LiteralPath $zprofile -Raw }
+        if ($existingProfile -notlike "*$pathLine*") {
+            Add-Content -LiteralPath $zprofile -Value @('', '# cmdpeek', $pathLine)
+            Write-Host "Added $binDest to PATH in $zprofile. Open a new terminal to use cmdpeek."
+        }
+        if (($env:PATH -split ':') -notcontains $binDest) { $env:PATH = $binDest + ':' + $env:PATH }
     }
 }
 
