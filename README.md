@@ -30,7 +30,7 @@ Package managers tell you *what* is installed. They do not remind you *how* to u
 
 ## Install
 
-Windows 10/11, PowerShell 5.1 or PowerShell 7+.
+Windows 10/11 (PowerShell 5.1 or 7+) or macOS (PowerShell 7+).
 
 ### Standalone (works without a package manager)
 
@@ -46,6 +46,17 @@ From GitHub once the repo is public:
 ```powershell
 irm https://raw.githubusercontent.com/UnspokenMallard/cmdpeek/main/install.ps1 | iex
 ```
+
+### macOS
+
+PowerShell 7 is needed (cmdpeek is a PowerShell module). Install it, then run the same installer from a clone:
+
+```sh
+brew install powershell
+pwsh -NoProfile -File ./install.ps1
+```
+
+The installer puts `cmdpeek` in `~/.local/share/cmdpeek/bin`, links the module into `~/.local/share/powershell/Modules`, and adds that `bin` folder to PATH in `~/.zprofile`. Open a new terminal afterwards. Pass `-SkipPath` to leave your shell profile alone.
 
 ### Scoop
 
