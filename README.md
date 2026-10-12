@@ -56,7 +56,7 @@ brew install powershell
 pwsh -NoProfile -File ./install.ps1
 ```
 
-The installer puts `cmdpeek` in `~/.local/share/cmdpeek/bin`, links the module into `~/.local/share/powershell/Modules`, and adds that `bin` folder to PATH in `~/.zprofile`. Open a new terminal afterwards. Pass `-SkipPath` to leave your shell profile alone.
+The installer puts `cmdpeek` in `~/.local/share/cmdpeek/bin`, links the module into `~/.local/share/powershell/Modules`, and adds that `bin` folder to PATH in your login shell file (`~/.zprofile` for zsh, `~/.bash_profile` or `~/.profile` for bash). Open a new terminal afterwards. Pass `-SkipPath` to leave your shell profile alone.
 
 ### Scoop
 

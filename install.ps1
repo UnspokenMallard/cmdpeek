@@ -145,14 +145,26 @@ if ($AddToPath -or -not $SkipPath) {
     }
     else {
         # Windows keeps PATH in the registry. macOS and Linux read it from a shell
-        # startup file, so add one marked line to ~/.zprofile (the macOS login shell).
-        $zprofile = Join-Path $HOME '.zprofile'
+        # startup file, so add one marked line to the file the login shell reads.
+        $onMac = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::OSX)
+        $shellName = ''
+        if ($env:SHELL) { $shellName = Split-Path -Leaf $env:SHELL }
+        $bashProfile = Join-Path $HOME '.bash_profile'
+        if ($shellName -eq 'zsh') { $rcFile = Join-Path $HOME '.zprofile' }
+        elseif ($shellName -eq 'bash') {
+            # bash login shells read ~/.bash_profile first and ~/.profile only when it is absent.
+            if ($onMac -or (Test-Path -LiteralPath $bashProfile)) { $rcFile = $bashProfile }
+            else { $rcFile = Join-Path $HOME '.profile' }
+        }
+        elseif ($onMac) { $rcFile = Join-Path $HOME '.zprofile' }
+        else { $rcFile = Join-Path $HOME '.profile' }
         $pathLine = 'export PATH="' + $binDest + ':$PATH"'
         $existingProfile = ''
-        if (Test-Path -LiteralPath $zprofile) { $existingProfile = Get-Content -LiteralPath $zprofile -Raw }
-        if ($existingProfile -notlike "*$pathLine*") {
-            Add-Content -LiteralPath $zprofile -Value @('', '# cmdpeek', $pathLine)
-            Write-Host "Added $binDest to PATH in $zprofile. Open a new terminal to use cmdpeek."
+        if (Test-Path -LiteralPath $rcFile) { $existingProfile = Get-Content -LiteralPath $rcFile -Raw }
+        if (-not $existingProfile) { $existingProfile = '' }
+        if (-not $existingProfile.Contains($pathLine)) {
+            Add-Content -LiteralPath $rcFile -Value @('', '# cmdpeek', $pathLine)
+            Write-Host "Added $binDest to PATH in $rcFile. Open a new terminal to use cmdpeek."
         }
         if (($env:PATH -split ':') -notcontains $binDest) { $env:PATH = $binDest + ':' + $env:PATH }
     }
