@@ -89,11 +89,16 @@ else {
     $shim = Join-Path $binDest 'cmdpeek'
     $script = Join-Path $moduleDest 'cmdpeek.ps1'
     $quotedScript = "'" + ($script -replace "'", "'\''") + "'"
-    @(
+    # ASCII would turn non-ASCII home paths (e.g. /Users/Anže) into '?'. Write UTF-8 without BOM, LF endings.
+    $shimLines = @(
         '#!/bin/sh'
         'command -v pwsh >/dev/null 2>&1 || { echo "cmdpeek needs PowerShell 7 (pwsh) on PATH: brew install powershell" >&2; exit 1; }'
         "exec pwsh -NoProfile -File $quotedScript `"`$@`""
-    ) | Set-Content -LiteralPath $shim -Encoding ASCII
+    )
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    # WriteAllText resolves relative paths against the process cwd, so resolve through PowerShell first.
+    $shimPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($shim)
+    [System.IO.File]::WriteAllText($shimPath, (($shimLines -join "`n") + "`n"), $utf8NoBom)
     & chmod +x $shim
 }
 
