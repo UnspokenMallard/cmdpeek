@@ -126,7 +126,9 @@ Describe 'Get-CmdPeekAptPackage command filtering' {
         }
     }
 
-    It 'drops library packages that ship no executable' {
+    # The fixture file "zlib1g:amd64.list" has a colon, which on NTFS is an alternate data
+    # stream, so the file is never listed. The Linux Pester job still runs this.
+    It 'drops library packages that ship no executable' -Skip:$IsWindows {
         $status = New-AptFixture -Root (Join-Path $TestDrive 'dpkg-libs')
         $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
         @($pkgs | Select-Object -ExpandProperty Name) | Should -Not -Contain 'zlib1g'
