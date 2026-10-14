@@ -118,7 +118,7 @@ Describe 'Get-CmdPeekAptPackage command filtering' {
             @('/usr/bin/ls', '/usr/bin/cat', '/usr/share/man/man1/ls.1.gz') |
                 Set-Content -LiteralPath (Join-Path $info 'coreutils.list') -Encoding UTF8
             @('/usr/lib/x86_64-linux-gnu/libz.so.1', '/usr/share/doc/zlib1g/copyright') |
-                Set-Content -LiteralPath (Join-Path $info 'zlib1g:amd64.list') -Encoding UTF8
+                Set-Content -LiteralPath (Join-Path $info 'zlib1g.list') -Encoding UTF8
             @('/usr/bin/mawk') |
                 Set-Content -LiteralPath (Join-Path $info 'mawk.list') -Encoding UTF8
 
@@ -126,9 +126,9 @@ Describe 'Get-CmdPeekAptPackage command filtering' {
         }
     }
 
-    # The fixture file "zlib1g:amd64.list" has a colon, which on NTFS is an alternate data
-    # stream, so the file is never listed. The Linux Pester job still runs this.
-    It 'drops library packages that ship no executable' -Skip:$IsWindows {
+    # The fixture avoids dpkg's multi-arch "name:arch.list" form: a colon is an NTFS alternate
+    # data stream on Windows, so such a file is never listed.
+    It 'drops library packages that ship no executable' {
         $status = New-AptFixture -Root (Join-Path $TestDrive 'dpkg-libs')
         $pkgs = @(Get-CmdPeekAptPackage -StatusPath $status)
         @($pkgs | Select-Object -ExpandProperty Name) | Should -Not -Contain 'zlib1g'
