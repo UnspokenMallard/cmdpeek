@@ -74,6 +74,7 @@ function Invoke-CmdPeekSmokeCase {
         $sw.Stop()
         $script:failures.Add("$Name timed out after $($script:timeout)s")
         $script:results.Add([pscustomobject]@{ name = $Name; seconds = [math]::Round($sw.Elapsed.TotalSeconds, 1); exit = 'timeout'; bytes = 0 })
+        Write-Host ("  {0,-22} timeout after {1}s" -f $Name, $script:timeout)
         return
     }
     $sw.Stop()
@@ -92,6 +93,9 @@ function Invoke-CmdPeekSmokeCase {
             exit    = $proc.ExitCode
             bytes   = $bytes
         })
+
+    # One line per case as it finishes, so a job that is cancelled mid-run still shows how far it got.
+    Write-Host ("  {0,-22} {1,6}s exit {2}" -f $Name, [math]::Round($sw.Elapsed.TotalSeconds, 1), $proc.ExitCode)
 
     if ($proc.ExitCode -ne $ExpectExitCode) {
         $head = (@($stderr -split "`n" | Select-Object -First 5) -join "`n    ")
