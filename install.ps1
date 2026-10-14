@@ -89,7 +89,7 @@ else {
     $shim = Join-Path $binDest 'cmdpeek'
     $script = Join-Path $moduleDest 'cmdpeek.ps1'
     $quotedScript = "'" + ($script -replace "'", "'\''") + "'"
-    # ASCII would turn non-ASCII home paths (e.g. /Users/Anže) into '?'. Write UTF-8 without BOM, LF endings.
+    # ASCII would turn non-ASCII home paths (e.g. a home path with a diacritic) into '?'. Write UTF-8 without BOM, LF endings.
     $shimLines = @(
         '#!/bin/sh'
         'command -v pwsh >/dev/null 2>&1 || { echo "cmdpeek needs PowerShell 7 (pwsh) on PATH: brew install powershell" >&2; exit 1; }'
