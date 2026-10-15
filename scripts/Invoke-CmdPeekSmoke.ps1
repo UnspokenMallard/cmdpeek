@@ -70,6 +70,17 @@ function Invoke-CmdPeekSmokeCase {
         -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
     $finished = $proc.WaitForExit($script:timeout * 1000)
     if (-not $finished) {
+        # Show what the hung case was doing before it is killed: the process tree and partial output.
+        if (-not $IsWindows -and $PSVersionTable.PSEdition -ne 'Desktop') {
+            Write-Host "  --- $Name hung: process tree ---"
+            try { & ps -eo 'pid,ppid,etime,stat,args' --forest 2>&1 | Select-Object -Last 40 | ForEach-Object { Write-Host "  $_" } } catch { }
+        }
+        foreach ($f in @($stdoutFile, $stderrFile)) {
+            if (Test-Path -LiteralPath $f) {
+                Write-Host "  --- $Name hung: tail of $([System.IO.Path]::GetFileName($f)) ---"
+                Get-Content -LiteralPath $f -Tail 20 | ForEach-Object { Write-Host "  $_" }
+            }
+        }
         try { $proc.Kill() } catch { }
         $sw.Stop()
         $script:failures.Add("$Name timed out after $($script:timeout)s")
