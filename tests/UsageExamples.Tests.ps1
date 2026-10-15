@@ -489,3 +489,20 @@ Describe 'Add-CmdPeekUsageProbe budget' {
         }
     }
 }
+
+Describe 'Invoke-CmdPeekProcessHelp' {
+    It 'returns promptly when a background child keeps the output pipe open' {
+        if ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows) {
+            Set-ItResult -Skipped -Because 'needs /bin/sh'
+            return
+        }
+        $script = Join-Path $TestDrive 'lingers'
+        Set-Content -LiteralPath $script -Value "#!/bin/sh`necho usage: lingers`nsleep 30 &`nexit 0`n"
+        chmod +x $script
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $r = Invoke-CmdPeekProcessHelp -FilePath $script -Argument '--help'
+        $sw.Stop()
+        $sw.Elapsed.TotalSeconds | Should -BeLessThan 10
+        $r.Crash | Should -BeTrue
+    }
+}

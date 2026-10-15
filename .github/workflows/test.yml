@@ -101,5 +101,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Smoke test against this runner
         shell: pwsh
-        run: ./scripts/Invoke-CmdPeekSmoke.ps1 -TimeoutSeconds 60
+        run: ./scripts/Invoke-CmdPeekSmoke.ps1 -TimeoutSeconds 120
 

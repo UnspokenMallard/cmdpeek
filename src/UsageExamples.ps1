@@ -699,10 +699,15 @@ function Invoke-CmdPeekProcessHelp {
             return [pscustomobject]@{ Text = $null; Crash = $true }
         }
 
+        # A child that outlives the binary can hold the pipes open, so reads need their own deadline.
+        try { $null = [System.Threading.Tasks.Task]::WaitAll(@($stdoutTask, $stderrTask), 1000) } catch { }
+        if (-not ($stdoutTask.IsCompleted -and $stderrTask.IsCompleted)) {
+            return [pscustomobject]@{ Text = $null; Crash = $true }
+        }
         $out = ''
         $err = ''
-        try { $out = [string]$stdoutTask.GetAwaiter().GetResult() } catch { }
-        try { $err = [string]$stderrTask.GetAwaiter().GetResult() } catch { }
+        try { $out = [string]$stdoutTask.Result } catch { }
+        try { $err = [string]$stderrTask.Result } catch { }
         $text = ($out + "`n" + $err).Trim()
         if (Test-CmdPeekCrashHelpText -Text $text) {
             return [pscustomobject]@{ Text = $null; Crash = $true }
