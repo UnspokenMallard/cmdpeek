@@ -469,12 +469,20 @@ function Get-CmdPeekAptPackageCommand {
 
     $commands = New-Object System.Collections.Generic.List[string]
     if (-not $ListPath -or -not (Test-Path -LiteralPath $ListPath)) { return @($commands.ToArray()) }
-    foreach ($line in @(Get-Content -LiteralPath $ListPath -ErrorAction SilentlyContinue)) {
-        if (-not $line) { continue }
-        if ($line -notmatch '(^|/)s?bin/([^/]+)$') { continue }
-        $stem = Get-CmdPeekCommandStem -FileName $Matches[2]
-        if ($stem -and $commands -notcontains $stem) { $commands.Add($stem) }
+    # ReadLines with a cheap prefilter: Get-Content plus a regex per line cost ~70s on a runner with millions of dpkg lines.
+    $lines = $null
+    try { $lines = [System.IO.File]::ReadLines($ListPath) } catch { return @($commands.ToArray()) }
+    $rx = [regex]'(^|/)s?bin/([^/]+)$'
+    try {
+        foreach ($line in $lines) {
+            if (-not $line -or $line.IndexOf('bin/', [System.StringComparison]::Ordinal) -lt 0) { continue }
+            $m = $rx.Match($line)
+            if (-not $m.Success) { continue }
+            $stem = Get-CmdPeekCommandStem -FileName $m.Groups[2].Value
+            if ($stem -and $commands -notcontains $stem) { $commands.Add($stem) }
+        }
     }
+    catch { }
     return @($commands.ToArray())
 }
 
