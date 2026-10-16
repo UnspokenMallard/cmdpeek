@@ -682,32 +682,48 @@ function Invoke-CmdPeekProcessHelp {
         $proc.StartInfo = $psi
         $null = $proc.Start()
         try { $proc.StandardInput.Close() } catch { }
-        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
-        $stderrTask = $proc.StandardError.ReadToEndAsync()
-
-        $exited = $proc.WaitForExit($TimeoutMs)
-        if (-not $exited) {
-            try {
-                $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
-                if (Test-Path -LiteralPath $taskkill) {
-                    & $taskkill /PID $proc.Id /T /F 2>$null | Out-Null
-                }
+        # Chunked reads keep partial output when a child outlives the binary and holds the pipes open.
+        $readers = @(
+            @{ Reader = $proc.StandardOutput; Buffer = (New-Object 'char[]' 4096); Text = (New-Object System.Text.StringBuilder); Task = $null; Done = $false },
+            @{ Reader = $proc.StandardError; Buffer = (New-Object 'char[]' 4096); Text = (New-Object System.Text.StringBuilder); Task = $null; Done = $false }
+        )
+        $clock = [System.Diagnostics.Stopwatch]::StartNew()
+        $exitedAt = $null
+        while ($true) {
+            $pending = @()
+            foreach ($r in $readers) {
+                if ($r.Done) { continue }
+                if (-not $r.Task) { $r.Task = $r.Reader.ReadAsync($r.Buffer, 0, $r.Buffer.Length) }
+                $pending += $r.Task
             }
-            catch { }
-            try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
-            try { $null = $proc.WaitForExit(2000) } catch { }
-            return [pscustomobject]@{ Text = $null; Crash = $true }
+            if ($pending.Count -eq 0) { break }
+            try { $null = [System.Threading.Tasks.Task]::WaitAny([System.Threading.Tasks.Task[]]$pending, 50) } catch { }
+            foreach ($r in $readers) {
+                if ($r.Done -or -not $r.Task -or -not $r.Task.IsCompleted) { continue }
+                $n = 0
+                try { $n = [int]$r.Task.Result } catch { }
+                if ($n -gt 0) { [void]$r.Text.Append($r.Buffer, 0, $n) } else { $r.Done = $true }
+                $r.Task = $null
+            }
+            if (-not $proc.HasExited) {
+                if ($clock.ElapsedMilliseconds -lt $TimeoutMs) { continue }
+                try {
+                    $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+                    if (Test-Path -LiteralPath $taskkill) {
+                        & $taskkill /PID $proc.Id /T /F 2>$null | Out-Null
+                    }
+                }
+                catch { }
+                try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
+                try { $null = $proc.WaitForExit(2000) } catch { }
+                return [pscustomobject]@{ Text = $null; Crash = $true }
+            }
+            # Exited but a background child still holds a pipe: give it 1s, then use what was read.
+            if ($null -eq $exitedAt) { $exitedAt = $clock.ElapsedMilliseconds }
+            elseif ($clock.ElapsedMilliseconds - $exitedAt -ge 1000) { break }
         }
-
-        # A child that outlives the binary can hold the pipes open, so reads need their own deadline.
-        try { $null = [System.Threading.Tasks.Task]::WaitAll(@($stdoutTask, $stderrTask), 1000) } catch { }
-        if (-not ($stdoutTask.IsCompleted -and $stderrTask.IsCompleted)) {
-            return [pscustomobject]@{ Text = $null; Crash = $true }
-        }
-        $out = ''
-        $err = ''
-        try { $out = [string]$stdoutTask.Result } catch { }
-        try { $err = [string]$stderrTask.Result } catch { }
+        $out = $readers[0].Text.ToString()
+        $err = $readers[1].Text.ToString()
         $text = ($out + "`n" + $err).Trim()
         if (Test-CmdPeekCrashHelpText -Text $text) {
             return [pscustomobject]@{ Text = $null; Crash = $true }

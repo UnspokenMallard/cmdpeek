@@ -491,7 +491,7 @@ Describe 'Add-CmdPeekUsageProbe budget' {
 }
 
 Describe 'Invoke-CmdPeekProcessHelp' {
-    It 'returns promptly when a background child keeps the output pipe open' {
+    It 'keeps the help text when a background child keeps the output pipe open' {
         if ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows) {
             Set-ItResult -Skipped -Because 'needs /bin/sh'
             return
@@ -503,6 +503,7 @@ Describe 'Invoke-CmdPeekProcessHelp' {
         $r = Invoke-CmdPeekProcessHelp -FilePath $script -Argument '--help'
         $sw.Stop()
         $sw.Elapsed.TotalSeconds | Should -BeLessThan 10
-        $r.Crash | Should -BeTrue
+        $r.Crash | Should -BeFalse
+        $r.Text | Should -Match 'usage: lingers'
     }
 }
